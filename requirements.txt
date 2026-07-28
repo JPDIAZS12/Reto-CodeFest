@@ -1,0 +1,26 @@
+# === Núcleo obligatorio ===
+faiss-cpu>=1.8.0
+sentence-transformers>=3.0.0
+transformers>=4.40.0
+torch>=2.2.0
+numpy>=1.26.0
+
+# === Extracción de texto por formato ===
+pymupdf>=1.24.0          # PDF (fitz)
+beautifulsoup4>=4.12.0   # HTML
+lxml>=5.0.0              # parser HTML/XML
+pandas>=2.2.0            # CSV
+openpyxl>=3.1.0          # XLSX
+
+# === Limpieza / idioma ===
+langdetect>=1.0.9
+
+# === OCR de imágenes (opcional, requiere Tesseract instalado en el sistema) ===
+pillow>=10.0.0
+pytesseract>=0.3.10
+
+# === Grafo de conocimiento (bonus) ===
+networkx>=3.2
+
+# === Informe (opcional, para generar el PDF) ===
+# reportlab>=4.0.0

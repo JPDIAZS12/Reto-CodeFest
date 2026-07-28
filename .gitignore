@@ -1,0 +1,26 @@
+# Datos crudos de ADL (no se versionan: pueden ser pesados / con licencia)
+data/
+!data/.gitkeep
+
+# Artefactos generados
+entrega/base_vectorial/
+entrega/grafo/
+*.faiss
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+env/
+*.egg-info/
+
+# Modelos / caches de HuggingFace
+.cache/
+models/
+
+# SO / editor
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
