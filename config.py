@@ -13,7 +13,7 @@ RESULTADOS_FILE = ENTREGA_DIR / "resultados.jsonl"
 # --- Encoder ---
 # Modelo encoder (familia BERT/XLM-R). Prohibidos decoders (GPT/LLaMA/etc.).
 ENCODER_NAME = "intfloat/multilingual-e5-large"
-ENCODER_SLUG = "e5-large"                    # nombre de la subcarpeta encoder_<slug>
+ENCODER_SLUG = "e5-large"                    
 EMBED_DIM = 1024
 MAX_INPUT_TOKENS = 512                       # límite del encoder
 # e5 requiere prefijos explícitos:

@@ -5,7 +5,7 @@ import re
 import unicodedata
 from collections import Counter
 
-# Caracteres de control (excepto \n y \t) a eliminar
+# Caracteres de control a eliminar
 _CONTROL_RE = re.compile(r"[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]")
 _MULTISPACE_RE = re.compile(r"[ \t ]+")
 _MULTINEWLINE_RE = re.compile(r"\n{3,}")
@@ -15,11 +15,9 @@ _PAGE_NUM_RE = re.compile(r"^\s*(?:p[áa]gina\s*)?[-–]?\s*\d+\s*[-–]?\s*$",
 
 
 def normalize(text: str) -> str:
-    """Normaliza codificación (UTF-8/NFC), quita controles y espacios redundantes."""
     text = unicodedata.normalize("NFC", text)
     text = _CONTROL_RE.sub("", text)
     text = text.replace("\r\n", "\n").replace("\r", "\n")
-    # unir palabras cortadas por guion a fin de línea: "innova-\nción" -> "innovación"
     text = re.sub(r"(\w)-\n(\w)", r"\1\2", text)
     text = _MULTISPACE_RE.sub(" ", text)
     text = _MULTINEWLINE_RE.sub("\n\n", text)
@@ -27,7 +25,7 @@ def normalize(text: str) -> str:
 
 
 def remove_boilerplate(text: str) -> str:
-    """Elimina líneas repetitivas sin valor (cabeceras/pies) y numeración de página.
+    """Elimina líneas repetitivas sin valor y numeración de página.
 
     Una línea corta que se repite muchas veces a lo largo del documento suele ser
     un encabezado/pie recurrente.
@@ -36,7 +34,7 @@ def remove_boilerplate(text: str) -> str:
     freq = Counter(ln.strip() for ln in lines if ln.strip())
     repeated = {
         ln for ln, c in freq.items()
-        if c >= 4 and len(ln) <= 80  # corto y muy repetido = boilerplate
+        if c >= 4 and len(ln) <= 80
     }
 
     kept = []
@@ -56,7 +54,6 @@ def remove_boilerplate(text: str) -> str:
 
 
 def detect_language(text: str) -> str:
-    """Idioma predominante (es/en/pt/...). 'und' si no se puede determinar."""
     try:
         from langdetect import detect, DetectorFactory
         DetectorFactory.seed = 0

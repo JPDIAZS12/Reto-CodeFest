@@ -13,10 +13,10 @@ from config import FORMAT_MAP
 @dataclass
 class Documento:
     doc_id: str
-    fuente: str          # nombre del archivo original provisto por ADL 
+    fuente: str          # nombre del archivo original
     formato: str         
     fenomeno: int        # 1, 2, 3 
-    texto: str           # texto plano extraído
+    texto: str         
     extra: dict = field(default_factory=dict)  # metadata descriptiva opcional 
 
 
@@ -37,11 +37,11 @@ def _make_doc_id(path: Path, root: Path) -> str:
 
 
 def _extract_pdf(path: Path) -> str:
-    import fitz  # PyMuPDF
+    import fitz  
     parts = []
     with fitz.open(path) as doc:
         for page in doc:
-            parts.append(page.get_text("text"))  # preserva orden de lectura
+            parts.append(page.get_text("text"))
     return "\n".join(parts)
 
 
@@ -62,8 +62,6 @@ def _extract_text(path: Path) -> str:
 def _extract_json(path: Path) -> tuple[str, dict]:
     """Interpreta el objeto y concatena campos de texto conocidos.
 
-    Campos de cuerpo típicos: title, body_text, body_paragraphs, text, content.
-    Campos descriptivos (url, date, authors, tags) van a metadata, no al cuerpo.
     """
     raw = json.loads(path.read_text(encoding="utf-8", errors="ignore"))
     records = raw if isinstance(raw, list) else [raw]
@@ -116,7 +114,7 @@ def _extract_xlsx(path: Path) -> str:
 
 
 def _extract_image(path: Path) -> str:
-    """OCR sobre imágenes con texto relevante (infografías/gráficos)."""
+    """OCR sobre imágenes con texto relevante"""
     try:
         import pytesseract
         from PIL import Image
@@ -157,7 +155,7 @@ def _extract_pbf(path: Path) -> str:
 
 
 def extract_document(path: Path, root: Path) -> Optional[Documento]:
-    """Extrae un documento; devuelve None si el formato no es soportado/vacío."""
+    """Extrae un documento; devuelve None si el formato no es soportado"""
     fmt = FORMAT_MAP.get(path.suffix.lower())
     if fmt is None:
         return None
