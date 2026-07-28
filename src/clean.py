@@ -1,5 +1,6 @@
-"""Limpieza y normalización del texto extraído (Sección 2.2)."""
+"""Limpieza y normalización del texto extraído"""
 from __future__ import annotations
+from langdetect import detect, DetectorFactory
 
 import re
 import unicodedata
@@ -55,7 +56,6 @@ def remove_boilerplate(text: str) -> str:
 
 def detect_language(text: str) -> str:
     try:
-        from langdetect import detect, DetectorFactory
         DetectorFactory.seed = 0
         sample = text[:2000]
         return detect(sample) if sample.strip() else "und"

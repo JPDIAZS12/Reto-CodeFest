@@ -19,6 +19,7 @@ MAX_INPUT_TOKENS = 512                       # límite del encoder
 # e5 requiere prefijos explícitos:
 E5_QUERY_PREFIX = "query: "
 E5_PASSAGE_PREFIX = "passage: "
+ENCODE_BATCH_SIZE = 32        # tamaño de lote al codificar (ajústalo según RAM/GPU)
 
 # --- Chunking ---
 CHUNK_MAX_TOKENS = 450        # margen bajo el límite de 512 del encoder

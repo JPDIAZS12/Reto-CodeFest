@@ -96,7 +96,7 @@ def group_sentences(
 
 
 def chunk_document(doc, tokenizer, idioma: str = "") -> list[Fragmento]:
-    """Fragmenta un Documento (de extract.py) y arma la metadata Tabla 1.
+    """Fragmenta un Documento y arma la metadata Tabla 1.
 
     `doc` debe exponer: .doc_id, .fuente, .formato, .fenomeno, .texto
     """
