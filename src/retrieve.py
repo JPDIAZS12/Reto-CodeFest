@@ -76,49 +76,69 @@ def top_documents(
 
     Estrategia por defecto: MAX POOLING (Sección 8.6) -> la puntuación de un
     documento es la del mejor de sus fragmentos recuperados.
-
-    Pistas:
-      - Recorre `scored` y, por cada (sim, meta), acumula la puntuación del
-        documento meta["doc_id"]. Con max pooling: guarda el MÁXIMO sim visto
-        por doc_id (útil un dict doc_id -> mejor_sim, p.ej. con defaultdict).
-      - Ordena los doc_id de mayor a menor puntuación agregada.
-      - Devuelve los primeros n doc_id (solo los ids, en orden).
-      - (DOC_AGGREGATION en config permite cambiar a "sum"/"mean" si quisieras
-        experimentar, pero implementa primero "max".)
     """
-    # TODO(tú): max pooling por doc_id y devolver los n mejores doc_id.
-    raise NotImplementedError
+    doc_scores = defaultdict(float)
+    
+    for similitud, metadata in scored:
+        doc_id = metadata["doc_id"]
+        if DOC_AGGREGATION == "max":
+            doc_scores[doc_id] = max(doc_scores[doc_id], similitud)
+        else:
+            raise ValueError(f"Método de agregación a nivel documento no conocido: {DOC_AGGREGATION}")
+    
+    
+    documentos_ordenados = sorted(doc_scores.items(), key=lambda similitud: similitud[1], reverse=True)
+    
+    lista_n_ids = []
+    
+    for i in range(min(n, len(documentos_ordenados))):
+        lista_n_ids.append(documentos_ordenados[i][0])
+    
+    return lista_n_ids
 
 
-# --------------------------------------------------------------------------- #
-# HUECO C — división de un texto en sub-fragmentos ≤ max_words
-# --------------------------------------------------------------------------- #
+
 def _split_by_words(text: str, max_words: int = MAX_WORDS_PER_FRAGMENT) -> list[str]:
     """Divide `text` en sub-fragmentos de a lo sumo `max_words` palabras,
-    SIN cortar oraciones (respeta la completitud lingüística, Sección 9.2.1).
+    sin cortar oraciones.
 
-    Pistas:
-      - Si el texto ya cabe (len(text.split()) <= max_words), devuelve [text].
-      - Si no: obtén las oraciones con split_sentences(text) y agrúpalas de
-        forma golosa (como en chunk.group_sentences, pero contando PALABRAS,
-        no tokens, y SIN solapamiento):
-            * acumula oraciones mientras la suma de palabras no supere max_words
-            * cuando la siguiente oración se pasaría, cierra el sub-fragmento
-              (" ".join del buffer) y arranca uno nuevo con esa oración.
-      - Cuenta palabras con len(oracion.split()).
-      - Caso borde: una sola oración con más de max_words palabras no se puede
-        dividir sin cortarla. Como la evaluación DESCARTA fragmentos >250
-        palabras, en ese caso haz un corte duro por palabras (text.split()
-        en trozos de max_words) para no perder el fragmento. Es raro.
-      - Devuelve la lista de sub-fragmentos (cada uno ≤ max_words palabras).
     """
-    # TODO(tú): dividir en sub-fragmentos respetando oraciones.
-    raise NotImplementedError
+    sub_fragmentos = []
+    buffer = []
+    palabras_sub_fragmento_actual = 0
+    
+    if len(text.split()) <= max_words:
+        return [text]
+    
+    for oracion in split_sentences(text):
+        cantidad_palabras_oracion = len(oracion.split())
+        if cantidad_palabras_oracion > max_words: 
+            if buffer:
+                sub_fragmento_valido = " ".join(buffer)
+                sub_fragmentos.append(sub_fragmento_valido)
+                buffer = [] 
+                palabras_sub_fragmento_actual = 0
+            palabras = oracion.split()
+            for inicio in range(0, len(palabras), max_words):
+                sub_fragmento_duro = " ".join(palabras[inicio: inicio + max_words])
+                sub_fragmentos.append(sub_fragmento_duro)
+            continue
+        if palabras_sub_fragmento_actual + cantidad_palabras_oracion > max_words:
+            sub_fragmento_valido = " ".join(buffer)
+            sub_fragmentos.append(sub_fragmento_valido)
+            buffer = [oracion]
+            palabras_sub_fragmento_actual = cantidad_palabras_oracion
+        else:
+            buffer.append(oracion)      
+            palabras_sub_fragmento_actual += cantidad_palabras_oracion    
 
+    if buffer:
+        restante = " ".join(buffer)
+        sub_fragmentos.append(restante)
+        
+    return sub_fragmentos
+                
 
-# --------------------------------------------------------------------------- #
-# Construcción de la lista de fragmentos (provisto, usa _split_by_words)
-# --------------------------------------------------------------------------- #
 def top_fragments(
     scored: list[tuple[float, dict]],
     n: int = TOP_N_FRAGMENTS,
@@ -126,26 +146,21 @@ def top_fragments(
 ) -> list[dict]:
     """Devuelve hasta n fragmentos de salida, cada uno ≤ max_words palabras.
 
-    Recorre los candidatos por orden de similitud; si un candidato supera
-    max_words se parte en sub-fragmentos (todos conservan el chunk_id original)
-    y cada sub-fragmento ocupa su propia posición hasta completar n.
     """
     fragmentos: list[dict] = []
-    for _sim, meta in scored:
-        for sub in _split_by_words(meta["texto"], max_words):
+    for similitud, metadata in scored:
+        for sub_fragmento in _split_by_words(metadata["texto"], max_words):
             fragmentos.append({
-                "chunk_id": meta["chunk_id"],   # id del fragmento ORIGINAL (trazabilidad)
-                "doc_id": meta["doc_id"],
-                "text": sub,
+                "chunk_id": metadata["chunk_id"],
+                "doc_id": metadata["doc_id"],
+                "text": sub_fragmento,
             })
             if len(fragmentos) >= n:
                 return fragmentos
     return fragmentos
 
 
-# --------------------------------------------------------------------------- #
-# Orquestador (provisto)
-# --------------------------------------------------------------------------- #
+
 def retrieve(
     query: str,
     index: faiss.Index,

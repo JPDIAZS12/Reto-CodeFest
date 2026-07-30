@@ -37,7 +37,6 @@ class Fragmento:
 def split_sentences(text: str) -> list[str]:
     """Divide `text` en una lista de oraciones completas.
     """
-    # TODO(tú): implementar la división en oraciones.
     oraciones_validas = []
     expresion_regular = re.compile(r'(?<=[.!?…])\s+(?=[«"“¿¡A-ZÁÉÍÓÚÑ0-9])')
     for parrafo in text.split("\n"):
@@ -66,7 +65,6 @@ def group_sentences(
 
     Devuelve: lista de textos de chunk, en orden.
     """
-    # TODO(tú): implementar el agrupamiento con solapamiento.
     chunks = []
     buffer = []
     for oracion in sentences:
