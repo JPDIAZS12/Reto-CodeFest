@@ -18,6 +18,7 @@ Uso:  python -m src.build_index
 """
 from __future__ import annotations
 
+import argparse
 import json
 from pathlib import Path
 
@@ -37,9 +38,7 @@ from src.chunk import chunk_document, Fragmento
 from src.encode import Encoder
 
 
-# --------------------------------------------------------------------------- #
-# 1. Recolección de fragmentos (orquestación, ya provista)
-# --------------------------------------------------------------------------- #
+
 def collect_fragments(root: Path, tokenizer) -> list[Fragmento]:
     """Recorre el corpus y devuelve TODOS los fragmentos en un orden estable.
 
@@ -81,26 +80,49 @@ def persist(index: faiss.Index, fragmentos: list[Fragmento], out_dir: Path) -> N
 
 
 
+def parse_args() -> argparse.Namespace:
+    """--data: carpeta del corpus a indexar. --out: carpeta de salida."""
+    parser = argparse.ArgumentParser(
+        description="Construye la base vectorial (index.faiss + metadata.jsonl)."
+    )
+    parser.add_argument(
+        "--data", default=str(DATA_DIR),
+        help="Carpeta del corpus a indexar. Por defecto: %(default)s",
+    )
+    parser.add_argument(
+        "--out", default=str(BASE_VECTORIAL_DIR / f"encoder_{ENCODER_SLUG}"),
+        help="Carpeta de salida encoder_<slug>. Por defecto: %(default)s",
+    )
+    parser.add_argument(
+        "--batch", type=int, default=ENCODE_BATCH_SIZE,
+        help="Tamaño de lote al codificar. Bájalo si hay poca RAM. Por defecto: %(default)s",
+    )
+    return parser.parse_args()
+
+
 def main() -> None:
+    args = parse_args()
+    data_dir = Path(args.data)
+    out_dir = Path(args.out)
+
     print("Cargando encoder.")
     enc = Encoder()
-    tokenizer = enc.model.tokenizer 
+    tokenizer = enc.model.tokenizer
 
-    print(f"Recorriendo corpus en {DATA_DIR} ...")
-    fragmentos = collect_fragments(DATA_DIR, tokenizer)
+    print(f"Recorriendo corpus en {data_dir} ...")
+    fragmentos = collect_fragments(data_dir, tokenizer)
     if not fragmentos:
-        print("[ERROR] No se generaron fragmentos. ¿Hay documentos en data/?")
+        print(f"[ERROR] No se generaron fragmentos. ¿Hay documentos en {data_dir}?")
         return
     print(f"  fragmentos totales: {len(fragmentos)}")
 
-    print("Codificando fragmentos (passage:) ...")
+    print(f"Codificando fragmentos (passage:) con batch={args.batch} ...")
     textos = [f.texto for f in fragmentos]
-    embeddings = enc.encode_passages(textos, batch_size=ENCODE_BATCH_SIZE)
+    embeddings = enc.encode_passages(textos, batch_size=args.batch)
 
     print("Construyendo índice FAISS ...")
     index = build_faiss_index(embeddings)
 
-    out_dir = BASE_VECTORIAL_DIR / f"encoder_{ENCODER_SLUG}"
     print(f"Guardando en {out_dir} ...")
     persist(index, fragmentos, out_dir)
 

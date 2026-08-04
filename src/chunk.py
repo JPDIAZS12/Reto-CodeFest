@@ -66,28 +66,45 @@ def group_sentences(
     Devuelve: lista de textos de chunk, en orden.
     """
     chunks = []
-    buffer = []
-    for oracion in sentences:
-        buffer.append(oracion)
-        texto_buffer_actual = " ".join(buffer)
-        numero_tokens_actual = count_tokens(texto_buffer_actual, tokenizer)
-        if numero_tokens_actual > max_tokens:
-            buffer.pop()  
-            if buffer:
-                texto_chunk = " ".join(buffer)
-                chunks.append(texto_chunk)
-                if overlap > 0:
-                    buffer = buffer[-overlap:]  
-                else:
-                    buffer = []
-                buffer.append(oracion)  
+
+    # Contar los tokens de cada oración UNA sola vez. Antes se re-tokenizaba
+    # todo el buffer en cada paso (costo cuadrático); ahora se lleva una suma
+    # corriente sumando el conteo por oración, ya calculado aquí.
+    tokens_por_oracion = [count_tokens(oracion, tokenizer) for oracion in sentences]
+
+    buffer = []          # lista de (oracion, n_tokens) del chunk en construcción
+    tokens_buffer = 0    # suma de tokens de las oraciones del buffer
+
+    for oracion, n_tokens in zip(sentences, tokens_por_oracion):
+        # ¿Agregar esta oración haría que el chunk actual supere el límite?
+        if buffer and tokens_buffer + n_tokens > max_tokens:
+            # Cerrar el chunk actual con lo acumulado
+            texto_chunk = " ".join(s for s, _ in buffer)
+            chunks.append(texto_chunk)
+            # Solapamiento: conservar las últimas `overlap` oraciones
+            if overlap > 0:
+                buffer = buffer[-overlap:]
             else:
-                # Caso borde: la oración sola excede el límite, emitirla como chunk
-                chunks.append(oracion)
                 buffer = []
+            # Recalcular la suma de tokens del buffer que quedó (el de solape)
+            tokens_buffer = 0
+            for _, t in buffer:
+                tokens_buffer += t
+
+        # Agregar la oración actual al buffer
+        buffer.append((oracion, n_tokens))
+        tokens_buffer += n_tokens
+
+        # Caso borde: una sola oración que por sí sola excede el límite no se
+        # puede dividir sin cortarla; se emite como su propio chunk.
+        if len(buffer) == 1 and n_tokens > max_tokens:
+            chunks.append(oracion)
+            buffer = []
+            tokens_buffer = 0
+
     # Emitir cualquier oración restante en el buffer como un chunk final
     if buffer:
-        texto_chunk_final = " ".join(buffer)
+        texto_chunk_final = " ".join(s for s, _ in buffer)
         chunks.append(texto_chunk_final)
     return chunks
 

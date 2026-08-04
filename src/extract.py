@@ -21,8 +21,13 @@ class Documento:
 
 
 def _fenomeno_from_path(path: Path) -> int:
+    """Deduce el fenómeno (1/2/3) del nombre de una carpeta ancestro.
+
+    Reconoce tanto nuestro esquema de prueba (fenomeno_1) como el del corpus
+    real de ADL (F1_IA_..., F2_Seguridad_..., F3_Dinamicas_...).
+    """
     for part in path.parts:
-        m = re.fullmatch(r"fenomeno[_\-]?(\d)", part.lower())
+        m = re.match(r"f(?:enomeno)?[_\-]?([123])", part.lower())
         if m:
             return int(m.group(1))
     return 0
@@ -60,14 +65,19 @@ def _extract_text(path: Path) -> str:
 
 
 def _extract_json(path: Path) -> tuple[str, dict]:
-    """Interpreta el objeto y concatena campos de texto conocidos.
+    """Interpreta el objeto y arma el texto sin duplicar el cuerpo.
 
+    Los JSON del corpus traen a la vez `body_text` (texto completo) y
+    `body_paragraphs` (el MISMO texto como lista de párrafos). Concatenar
+    ambos duplicaría todo el cuerpo, así que se elige UNA sola fuente de
+    cuerpo (se prefiere la lista de párrafos, luego body_text/otros).
     """
     raw = json.loads(path.read_text(encoding="utf-8", errors="ignore"))
     records = raw if isinstance(raw, list) else [raw]
 
-    body_keys = ("title", "headline", "body_text", "body", "body_paragraphs",
-                 "text", "content", "abstract", "summary")
+    titulo_keys = ("title", "headline")
+    cuerpo_keys = ("body_paragraphs", "body_text", "body", "text", "content", "article")
+    respaldo_keys = ("excerpt", "abstract", "summary")  # solo si no hay cuerpo
     meta_keys = ("url", "date", "published", "authors", "author", "tags", "source")
 
     body_parts, extra = [], {}
@@ -75,16 +85,37 @@ def _extract_json(path: Path) -> tuple[str, dict]:
         if not isinstance(rec, dict):
             body_parts.append(str(rec))
             continue
-        for k in body_keys:
-            if k in rec and rec[k]:
+
+        # Título
+        for k in titulo_keys:
+            if rec.get(k):
+                body_parts.append(str(rec[k]))
+                break
+
+        # Cuerpo: UNA sola fuente, la primera disponible
+        cuerpo = None
+        for k in cuerpo_keys:
+            if rec.get(k):
                 v = rec[k]
                 if isinstance(v, list):
-                    body_parts.append("\n".join(str(x) for x in v))
+                    cuerpo = "\n".join(str(x) for x in v)
                 else:
-                    body_parts.append(str(v))
+                    cuerpo = str(v)
+                break
+        if cuerpo:
+            body_parts.append(cuerpo)
+        else:
+            # Sin cuerpo: usar un resumen/excerpt como respaldo
+            for k in respaldo_keys:
+                if rec.get(k):
+                    body_parts.append(str(rec[k]))
+                    break
+
+        # Metadata descriptiva (no entra al cuerpo)
         for k in meta_keys:
-            if k in rec and rec[k] and k not in extra:
+            if rec.get(k) and k not in extra:
                 extra[k] = rec[k]
+
     return "\n\n".join(body_parts), extra
 
 

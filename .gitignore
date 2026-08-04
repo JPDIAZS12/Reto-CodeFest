@@ -1,6 +1,11 @@
 # Datos crudos de ADL (no se versionan: pueden ser pesados / con licencia)
 data/
 !data/.gitkeep
+# subconjunto del corpus copiado para pruebas (~394 MB)
+data_subset/
+
+# Archivos temporales de trabajo
+_scratch/
 
 # Artefactos generados
 entrega/base_vectorial/
