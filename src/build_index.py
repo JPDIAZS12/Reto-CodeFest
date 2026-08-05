@@ -41,7 +41,6 @@ from src.encode import Encoder
 
 def collect_fragments(root: Path, tokenizer) -> list[Fragmento]:
     """Recorre el corpus y devuelve TODOS los fragmentos en un orden estable.
-
     """
     fragmentos: list[Fragmento] = []
     for doc in iter_documents(root):
@@ -131,3 +130,4 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
+    

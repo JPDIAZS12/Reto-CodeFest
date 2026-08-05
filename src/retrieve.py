@@ -41,7 +41,11 @@ def load_base(out_dir: Path | None = None) -> tuple[faiss.Index, list[dict]]:
     if out_dir is None:
         out_dir = BASE_VECTORIAL_DIR / f"encoder_{ENCODER_SLUG}"
     index = faiss.read_index(str(out_dir / "index.faiss"))
-    lineas = (out_dir / "metadata.jsonl").read_text(encoding="utf-8").splitlines()
+    # Partir SOLO por '\n' (lo que escribe build_index entre registros). No usar
+    # str.splitlines(): corta también en separadores Unicode ( ,  ,
+    # \x85) que pueden aparecer dentro del campo 'texto' de PDFs reales y
+    # partirían un objeto JSON por la mitad.
+    lineas = (out_dir / "metadata.jsonl").read_text(encoding="utf-8").split("\n")
     metas = [json.loads(l) for l in lineas if l.strip()]
     return index, metas
 

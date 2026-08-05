@@ -144,24 +144,70 @@ def _extract_xlsx(path: Path) -> str:
     return "\n".join(out)
 
 
+def _ocr_es_util(texto: str) -> bool:
+    """Filtro de calidad del OCR: True si el texto parece contenido real y no
+    ruido (una foto decorativa produce garabatos cortos y sin palabras).
+
+    HUECO 1 (tú): decidir si el OCR aporta. Pistas — devuelve False si:
+      - hay muy pocas palabras (p.ej. len(texto.split()) < OCR_MIN_PALABRAS);
+      - la proporción de caracteres alfabéticos es baja (mucho símbolo/número
+        suelto). Puedes calcular:
+            alfa = sum(c.isalpha() or c.isspace() for c in texto)
+            ratio = alfa / max(len(texto), 1)
+        y exigir ratio >= OCR_MIN_RATIO_ALFA.
+      - (opcional) que exista al menos una "palabra larga" (>=4 letras), señal
+        de prosa y no de etiquetas sueltas.
+    Devuelve True solo si el texto supera esos umbrales.
+    """
+    # TODO(tú): implementar el filtro de calidad del OCR.
+    raise NotImplementedError
+
+
 def _extract_image(path: Path) -> str:
-    """OCR sobre imágenes con texto relevante"""
+    """OCR sobre imágenes con texto relevante, con filtro de calidad.
+
+    Solo devuelve el texto si _ocr_es_util lo considera contenido real; de lo
+    contrario devuelve "" (la imagen se descarta, no ensucia el índice).
+    """
     try:
         import pytesseract
         from PIL import Image
     except ImportError:
         return ""
     try:
-        return pytesseract.image_to_string(Image.open(path), lang="spa+eng+por")
+        texto = pytesseract.image_to_string(Image.open(path), lang="spa+eng+por")
     except Exception:
         return ""
+    texto = texto.strip()
+    if not texto:
+        return ""
+    if not _ocr_es_util(texto):
+        return ""
+    return texto
+
+
+def _prop_es_util(clave: str, valor) -> bool:
+    """Filtro de atributos de un feature de mapa: True si el par clave:valor
+    aporta significado textual (un nombre de zona/municipio), False si es ruido
+    técnico del tile (ids, coordenadas, códigos internos).
+
+    HUECO 2 (tú): decidir qué atributos conservar. Pistas — devuelve False si:
+      - el valor está vacío o es puramente numérico (str(valor) es dígito/float);
+      - la clave es metadata técnica del tile (p.ej. está en un conjunto como
+        {"id","fid","gid","osm_id","layer","zoom","x","y"} — ajústalo a lo que
+        veas en los datos reales);
+      - el valor es demasiado corto para ser un nombre (p.ej. < 3 caracteres).
+    Devuelve True cuando el valor parece un texto con significado (un nombre).
+    """
+    # TODO(tú): implementar el filtro de atributos útiles.
+    raise NotImplementedError
 
 
 def _extract_pbf(path: Path) -> str:
-    """Mapas en formato PBF (vector tiles).
+    """Mapas en formato PBF (vector tiles), con dedup agresivo y filtro de props.
 
-    Se recorren capas y elementos leyendo atributos como pares 'atributo: valor'.
-    Se deduplica para no repetir el mismo elemento en varios niveles de zoom.
+    - Deduplica features repetidos (el mismo elemento aparece en varios zooms).
+    - Conserva solo los atributos que _prop_es_util considera con significado.
     Requiere 'mapbox_vector_tile'. Si no está disponible, se omite el documento.
     """
     try:
@@ -176,11 +222,15 @@ def _extract_pbf(path: Path) -> str:
     for layer in tile.values():
         for feat in layer.get("features", []):
             props = feat.get("properties", {})
-            key = tuple(sorted(props.items()))
-            if not props or key in seen:
+            # conservar solo atributos con significado textual
+            utiles = {k: v for k, v in props.items() if _prop_es_util(k, v)}
+            if not utiles:
+                continue
+            key = tuple(sorted(utiles.items()))
+            if key in seen:      # dedup: mismo feature ya visto en otro zoom
                 continue
             seen.add(key)
-            lines.append(" | ".join(f"{k}: {v}" for k, v in props.items()))
+            lines.append(" | ".join(f"{k}: {v}" for k, v in utiles.items()))
     return "\n".join(lines)
 
 

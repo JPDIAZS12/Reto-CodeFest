@@ -19,6 +19,10 @@ def normalize(text: str) -> str:
     text = unicodedata.normalize("NFC", text)
     text = _CONTROL_RE.sub("", text)
     text = text.replace("\r\n", "\n").replace("\r", "\n")
+    # Separadores de línea Unicode que str.splitlines() trataría como salto de
+    # línea: NEL (\x85), LINE SEPARATOR ( ), PARAGRAPH SEPARATOR ( ).
+    # Si quedaran en el texto romperían la lectura del JSONL. Se unifican a \n.
+    text = text.replace("\x85", "\n").replace(" ", "\n").replace(" ", "\n")
     text = re.sub(r"(\w)-\n(\w)", r"\1\2", text)
     text = _MULTISPACE_RE.sub(" ", text)
     text = _MULTINEWLINE_RE.sub("\n\n", text)

@@ -43,5 +43,11 @@ FORMAT_MAP = {
     ".csv": "csv",
     ".xlsx": "xlsx", ".xls": "xlsx",
     ".png": "img", ".jpg": "img", ".jpeg": "img", ".tif": "img", ".tiff": "img",
+    ".avif": "img", ".webp": "img",
     ".pbf": "pbf",
 }
+
+# --- Filtros de calidad para formatos ruidosos (OCR de imágenes y mapas PBF) ---
+OCR_MIN_PALABRAS = 8       # mínimo de palabras para que el OCR se considere útil
+OCR_MIN_RATIO_ALFA = 0.6  # proporción mínima de caracteres alfabéticos/espacio
+PBF_PROP_MIN_LEN = 3      # longitud mínima del valor de un atributo para conservarlo
