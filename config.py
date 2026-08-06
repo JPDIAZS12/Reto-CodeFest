@@ -31,7 +31,8 @@ TOP_K_CHUNKS_SEARCH = 50      # candidatos a recuperar de FAISS por consulta
 TOP_N_FRAGMENTS = 10          # fragmentos a devolver (NDCG@10)
 TOP_N_DOCUMENTS = 3           # documentos a devolver (F1@3)
 MAX_WORDS_PER_FRAGMENT = 250  # límite duro de palabras por fragmento de salida
-DOC_AGGREGATION = "max"       # "max" | "sum" | "mean" (max pooling por defecto)
+DOC_AGGREGATION = "max"       # "max" | "sum" | "mean" | "topm" (max pooling por defecto)
+TOP_M_CHUNKS_POR_DOC = 3      # solo aplica cuando DOC_AGGREGATION == "topm"
 # Dedup de fragmentos: dos fragmentos con similitud de Jaccard (palabras) >= a
 # este umbral se consideran casi-duplicados (el solapamiento de chunks los crea).
 DEDUP_JACCARD = 0.8

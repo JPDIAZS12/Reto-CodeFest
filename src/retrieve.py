@@ -30,6 +30,7 @@ from config import (
     TOP_N_DOCUMENTS,
     MAX_WORDS_PER_FRAGMENT,
     DOC_AGGREGATION,
+    TOP_M_CHUNKS_POR_DOC,
     DEDUP_JACCARD,
 )
 from src.encode import Encoder
@@ -83,22 +84,46 @@ def top_documents(
     documento es la del mejor de sus fragmentos recuperados.
     """
     doc_scores = defaultdict(float)
-    
-    for similitud, metadata in scored:
-        doc_id = metadata["doc_id"]
-        if DOC_AGGREGATION == "max":
+
+    if DOC_AGGREGATION == "max":
+        for similitud, metadata in scored:
+            doc_id = metadata["doc_id"]
             doc_scores[doc_id] = max(doc_scores[doc_id], similitud)
-        else:
-            raise ValueError(f"Método de agregación a nivel documento no conocido: {DOC_AGGREGATION}")
-    
-    
+
+    elif DOC_AGGREGATION == "sum":
+        for similitud, metadata in scored:
+            doc_id = metadata["doc_id"]
+            doc_scores[doc_id] += similitud
+            
+
+    elif DOC_AGGREGATION == "mean":
+        doc_counts = defaultdict(int)
+        for similitud, metadata in scored:
+            doc_id = metadata["doc_id"]
+            doc_scores[doc_id] += similitud
+            doc_counts[doc_id] += 1
+        for doc_id in doc_scores:
+            doc_scores[doc_id] /= doc_counts[doc_id]
+
+    elif DOC_AGGREGATION == "topm":
+        dict_doc_chunks = defaultdict(list)
+        for similitud, metadata in scored:
+            doc_id = metadata["doc_id"]
+            dict_doc_chunks[doc_id].append(similitud)
+        for doc_id, similitudes in dict_doc_chunks.items():
+            doc_scores[doc_id] = sum(similitudes[:TOP_M_CHUNKS_POR_DOC])
+
+    else:
+        raise ValueError(f"Método de agregación a nivel documento no conocido: {DOC_AGGREGATION}")
+
+
     documentos_ordenados = sorted(doc_scores.items(), key=lambda similitud: similitud[1], reverse=True)
-    
+
     lista_n_ids = []
-    
+
     for i in range(min(n, len(documentos_ordenados))):
         lista_n_ids.append(documentos_ordenados[i][0])
-    
+
     return lista_n_ids
 
 
