@@ -30,6 +30,7 @@ from config import (
     TOP_N_DOCUMENTS,
     MAX_WORDS_PER_FRAGMENT,
     DOC_AGGREGATION,
+    DEDUP_JACCARD,
 )
 from src.encode import Encoder
 from src.chunk import split_sentences
@@ -143,22 +144,46 @@ def _split_by_words(text: str, max_words: int = MAX_WORDS_PER_FRAGMENT) -> list[
     return sub_fragmentos
                 
 
+def _es_duplicado(
+    texto: str,
+    textos_previos: list[str],
+    umbral: float = DEDUP_JACCARD,
+) -> bool:
+    """True si `texto` es casi-duplicado de ALGUNO de `textos_previos`.
+    """
+    palabras = set(texto.lower().split())
+    for prev in textos_previos:
+        prev_palabras = set(prev.lower().split())
+        interseccion = palabras & prev_palabras
+        union = palabras | prev_palabras
+        jaccard = len(interseccion) / max(len(union), 1)
+        if jaccard >= umbral:
+            return True
+    
+    return False
+    
+    
+
+
 def top_fragments(
     scored: list[tuple[float, dict]],
     n: int = TOP_N_FRAGMENTS,
     max_words: int = MAX_WORDS_PER_FRAGMENT,
 ) -> list[dict]:
     """Devuelve hasta n fragmentos de salida, cada uno ≤ max_words palabras.
-
     """
     fragmentos: list[dict] = []
+    textos_incluidos: list[str] = []  
     for similitud, metadata in scored:
         for sub_fragmento in _split_by_words(metadata["texto"], max_words):
+            if _es_duplicado(sub_fragmento, textos_incluidos):
+                continue
             fragmentos.append({
                 "chunk_id": metadata["chunk_id"],
                 "doc_id": metadata["doc_id"],
                 "text": sub_fragmento,
             })
+            textos_incluidos.append(sub_fragmento)
             if len(fragmentos) >= n:
                 return fragmentos
     return fragmentos

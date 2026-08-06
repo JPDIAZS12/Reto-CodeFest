@@ -32,6 +32,9 @@ TOP_N_FRAGMENTS = 10          # fragmentos a devolver (NDCG@10)
 TOP_N_DOCUMENTS = 3           # documentos a devolver (F1@3)
 MAX_WORDS_PER_FRAGMENT = 250  # límite duro de palabras por fragmento de salida
 DOC_AGGREGATION = "max"       # "max" | "sum" | "mean" (max pooling por defecto)
+# Dedup de fragmentos: dos fragmentos con similitud de Jaccard (palabras) >= a
+# este umbral se consideran casi-duplicados (el solapamiento de chunks los crea).
+DEDUP_JACCARD = 0.8
 
 # --- Formatos soportados -> etiqueta del campo 'formato' de metadata ---
 FORMAT_MAP = {
@@ -51,3 +54,10 @@ FORMAT_MAP = {
 OCR_MIN_PALABRAS = 8       # mínimo de palabras para que el OCR se considere útil
 OCR_MIN_RATIO_ALFA = 0.6  # proporción mínima de caracteres alfabéticos/espacio
 PBF_PROP_MIN_LEN = 3      # longitud mínima del valor de un atributo para conservarlo
+# Claves técnicas de los vector tiles (pbf) que NO aportan texto con significado:
+# identificadores internos y códigos administrativos (PCODE), no nombres.
+# Basado en la inspección de los pbf reales (Amazon_Underworld).
+PBF_CLAVES_TECNICAS = {
+    "fid", "id", "gid", "osm_id", "layer", "zoom", "x", "y",
+    "b_adm2_pcode", "b_adm1_pcode", "b_id_concatenated", "au_id_concatenated",
+}

@@ -7,7 +7,13 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Optional
 
-from config import FORMAT_MAP
+from config import (
+    FORMAT_MAP,
+    OCR_MIN_PALABRAS,
+    OCR_MIN_RATIO_ALFA,
+    PBF_PROP_MIN_LEN,
+    PBF_CLAVES_TECNICAS,
+)
 
 
 @dataclass
@@ -146,21 +152,29 @@ def _extract_xlsx(path: Path) -> str:
 
 def _ocr_es_util(texto: str) -> bool:
     """Filtro de calidad del OCR: True si el texto parece contenido real y no
-    ruido (una foto decorativa produce garabatos cortos y sin palabras).
+    ruido.
 
-    HUECO 1 (tú): decidir si el OCR aporta. Pistas — devuelve False si:
-      - hay muy pocas palabras (p.ej. len(texto.split()) < OCR_MIN_PALABRAS);
-      - la proporción de caracteres alfabéticos es baja (mucho símbolo/número
-        suelto). Puedes calcular:
-            alfa = sum(c.isalpha() or c.isspace() for c in texto)
-            ratio = alfa / max(len(texto), 1)
-        y exigir ratio >= OCR_MIN_RATIO_ALFA.
-      - (opcional) que exista al menos una "palabra larga" (>=4 letras), señal
-        de prosa y no de etiquetas sueltas.
     Devuelve True solo si el texto supera esos umbrales.
     """
-    # TODO(tú): implementar el filtro de calidad del OCR.
-    raise NotImplementedError
+    longitud_palabra = len(texto.split())
+    
+    if longitud_palabra < OCR_MIN_PALABRAS:
+        return False
+    
+    alfa = 0
+    
+    for c in texto:
+        if c.isalpha() or c.isspace():
+            alfa += 1
+    
+    ratio = alfa / max(len(texto), 1)
+    
+    if ratio < OCR_MIN_RATIO_ALFA:
+        return False
+    
+    return True
+    
+    
 
 
 def _extract_image(path: Path) -> str:
@@ -188,27 +202,31 @@ def _extract_image(path: Path) -> str:
 
 def _prop_es_util(clave: str, valor) -> bool:
     """Filtro de atributos de un feature de mapa: True si el par clave:valor
-    aporta significado textual (un nombre de zona/municipio), False si es ruido
-    técnico del tile (ids, coordenadas, códigos internos).
-
-    HUECO 2 (tú): decidir qué atributos conservar. Pistas — devuelve False si:
-      - el valor está vacío o es puramente numérico (str(valor) es dígito/float);
-      - la clave es metadata técnica del tile (p.ej. está en un conjunto como
-        {"id","fid","gid","osm_id","layer","zoom","x","y"} — ajústalo a lo que
-        veas en los datos reales);
-      - el valor es demasiado corto para ser un nombre (p.ej. < 3 caracteres).
-    Devuelve True cuando el valor parece un texto con significado (un nombre).
+    aporta significado textual, False si es ruido.
     """
-    # TODO(tú): implementar el filtro de atributos útiles.
-    raise NotImplementedError
+
+    if not valor:
+        return False
+
+    # 2) clave técnica (identificadores y códigos, no nombres)
+    if clave.lower() in PBF_CLAVES_TECNICAS:
+        return False
+
+    if isinstance(valor, (int, float)):
+        return False
+    valor_str = str(valor).strip()
+    solo_digitos = valor_str.replace(".", "").replace(",", "")
+    if solo_digitos.isdigit():
+        return False
+
+    if len(valor_str) < PBF_PROP_MIN_LEN:
+        return False
+
+    return True
 
 
 def _extract_pbf(path: Path) -> str:
     """Mapas en formato PBF (vector tiles), con dedup agresivo y filtro de props.
-
-    - Deduplica features repetidos (el mismo elemento aparece en varios zooms).
-    - Conserva solo los atributos que _prop_es_util considera con significado.
-    Requiere 'mapbox_vector_tile'. Si no está disponible, se omite el documento.
     """
     try:
         import mapbox_vector_tile as mvt
@@ -227,7 +245,7 @@ def _extract_pbf(path: Path) -> str:
             if not utiles:
                 continue
             key = tuple(sorted(utiles.items()))
-            if key in seen:      # dedup: mismo feature ya visto en otro zoom
+            if key in seen: 
                 continue
             seen.add(key)
             lines.append(" | ".join(f"{k}: {v}" for k, v in utiles.items()))
