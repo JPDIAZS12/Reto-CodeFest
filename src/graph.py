@@ -102,18 +102,18 @@ def get_ner_pipeline(model_name: str = GRAPH_NER_MODEL):
     """Carga (una sola vez, perezosamente) el pipeline de NER multilingüe."""
     global _ner_pipeline
     if _ner_pipeline is None:
-        from transformers import pipeline
+        from transformers import AutoModelForTokenClassification, AutoTokenizer, pipeline
+
+        tokenizer = AutoTokenizer.from_pretrained(model_name, model_max_length=512)
+        model = AutoModelForTokenClassification.from_pretrained(model_name)
+
         _ner_pipeline = pipeline(
             "token-classification",
-            model=model_name,
+            model=model,
+            tokenizer=tokenizer,
             aggregation_strategy="simple",
         )
     return _ner_pipeline
-
-
-def _normalize_entity(text: str) -> str:
-    text = text.strip(" .,;:()[]{}\"'“”«»")
-    return re.sub(r"\s+", " ", text)
 
 
 def extract_entities(text: str) -> list[dict]:
@@ -123,7 +123,8 @@ def extract_entities(text: str) -> list[dict]:
     if not text or not text.strip():
         return []
     ner = get_ner_pipeline()
-    crudas = ner(text, truncation=True)
+    # Recorte preventivo en caracteres para garantizar seguridad
+    crudas = ner(text[:2000])
     entidades = []
     for e in crudas:
         nombre = _normalize_entity(e["word"])
@@ -136,6 +137,12 @@ def extract_entities(text: str) -> list[dict]:
             "end": int(e["end"]) if e.get("end") is not None else len(nombre),
         })
     return entidades
+
+
+def _normalize_entity(text: str) -> str:
+    text = text.strip(" .,;:()[]{}\"'“”«»")
+    return re.sub(r"\s+", " ", text)
+
 
 
 def infer_relation(gap_text: str) -> str:
