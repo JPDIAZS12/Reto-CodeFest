@@ -3,15 +3,6 @@
 Dada una consulta en lenguaje natural produce los DOS niveles de resultado:
   - documents: top-3 doc_id  (se evalúa con F1@3)
   - fragments: top-10 fragmentos ≤250 palabras (se evalúa con NDCG@10)
-
-Flujo (Figura 2):
-  consulta --(query:)--> vector --> FAISS.search (pool amplio ~50)
-        --> pool de candidatos (sim, metadata)
-              ├─ top_documents: max pooling por doc_id -> top-3
-              └─ top_fragments: top-10 + división a ≤250 palabras (Sección 9.2.1)
-
-Restricción (Sección 8.3): todo opera sobre vectores, puntuaciones y metadata.
-Ningún modelo generativo interviene.
 """
 from __future__ import annotations
 
@@ -43,10 +34,6 @@ def load_base(out_dir: Path | None = None) -> tuple[faiss.Index, list[dict]]:
     if out_dir is None:
         out_dir = BASE_VECTORIAL_DIR / f"encoder_{ENCODER_SLUG}"
     index = faiss.read_index(str(out_dir / "index.faiss"))
-    # Partir SOLO por '\n' (lo que escribe build_index entre registros). No usar
-    # str.splitlines(): corta también en separadores Unicode ( ,  ,
-    # \x85) que pueden aparecer dentro del campo 'texto' de PDFs reales y
-    # partirían un objeto JSON por la mitad.
     lineas = (out_dir / "metadata.jsonl").read_text(encoding="utf-8").split("\n")
     metas = [json.loads(l) for l in lineas if l.strip()]
     return index, metas
@@ -79,9 +66,6 @@ def top_documents(
     n: int = TOP_N_DOCUMENTS,
 ) -> list[str]:
     """Agrega los fragmentos por doc_id y devuelve los n mejores doc_id.
-
-    Estrategia por defecto: MAX POOLING (Sección 8.6) -> la puntuación de un
-    documento es la del mejor de sus fragmentos recuperados.
     """
     doc_scores = defaultdict(float)
 

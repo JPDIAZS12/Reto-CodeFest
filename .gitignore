@@ -1,7 +1,7 @@
-# Datos crudos de ADL (no se versionan: pueden ser pesados / con licencia)
+# Datos crudos de ADL 
 data/
 !data/.gitkeep
-# subconjunto del corpus copiado para pruebas (~394 MB)
+# subconjunto del corpus copiado para pruebas
 data_subset/
 
 # Archivos temporales de trabajo
@@ -11,6 +11,10 @@ _scratch/
 entrega/base_vectorial/
 entrega/grafo/
 *.faiss
+
+entrega/config.py
+entrega/src/
+entrega/queries.jsonl
 
 # Python
 __pycache__/

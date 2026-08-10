@@ -5,6 +5,7 @@ usa la base vectorial y escribe entrega/resultados.jsonl con EXACTAMENTE una
 línea por consulta, siguiendo el esquema de la Tabla 2 (Sección 9.3).
 
 Uso (desde la raíz del proyecto):  python entrega/generador.py
+Uso (desde el paquete entregado):  python generador.py
 
 Requiere haber construido antes la base:  python -m src.build_index
 """
@@ -15,22 +16,34 @@ import json
 import sys
 from pathlib import Path
 
-# entrega/generador.py vive dentro de entrega/; la raíz del proyecto (donde
-# están config.py y src/) es el directorio padre. Lo añadimos al path para
-# que los imports funcionen al ejecutar el script desde la entrega.
-sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+# Este script debe correr en DOS disposiciones distintas:
+#   (a) dentro del repo:     <raiz>/entrega/generador.py, con config.py y src/ en <raiz>
+#   (b) en el paquete final: <entrega>/generador.py, con config.py y src/ COPIADOS al lado
+# Se añaden ambas ubicaciones al path; gana la primera que tenga src/.
+AQUI = Path(__file__).resolve().parent
+sys.path.insert(0, str(AQUI.parent))
+sys.path.insert(0, str(AQUI))
 
-from config import (
-    QUERIES_FILE,
-    RESULTADOS_FILE,
-    TOP_N_DOCUMENTS,
-    TOP_N_FRAGMENTS,
-)
+from config import ENCODER_SLUG, TOP_N_DOCUMENTS, TOP_N_FRAGMENTS
 from src.encode import Encoder
 from src.retrieve import load_base, retrieve
 
+# Rutas ANCLADAS a la ubicación de este archivo, NO importadas de config.
+# config.py deriva las suyas de su propio directorio (ROOT = su carpeta), así
+# que al copiarlo dentro de entrega/ apuntaría a entrega/entrega/base_vectorial.
+# Anclando aquí, el paquete funciona esté donde esté y se mueva a donde se mueva.
+INDICE_DIR = AQUI / "base_vectorial" / f"encoder_{ENCODER_SLUG}"
+RESULTADOS_DEFECTO = AQUI / "resultados.jsonl"
 
-def load_queries(path: Path = QUERIES_FILE) -> list[tuple[str, str]]:
+# Las consultas viven en la raíz del repo, pero en el paquete van junto al
+# script. Se prefiere la copia local si existe.
+if (AQUI / "queries.jsonl").exists():
+    QUERIES_DEFECTO = AQUI / "queries.jsonl"
+else:
+    QUERIES_DEFECTO = AQUI.parent / "queries.jsonl"
+
+
+def load_queries(path: Path = QUERIES_DEFECTO) -> list[tuple[str, str]]:
     """Lee el archivo de consultas -> lista de (query_id, texto).
     """
     queries: list[tuple[str, str]] = []
@@ -115,12 +128,12 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument(
         "--queries",
-        default=str(QUERIES_FILE),
+        default=str(QUERIES_DEFECTO),
         help="Ruta al archivo de consultas (JSON Lines). Por defecto: %(default)s",
     )
     parser.add_argument(
         "--out",
-        default=str(RESULTADOS_FILE),
+        default=str(RESULTADOS_DEFECTO),
         help="Ruta del archivo de resultados a escribir. Por defecto: %(default)s",
     )
     return parser.parse_args()
@@ -131,8 +144,10 @@ def main() -> None:
     queries_path = Path(args.queries)
     out_path = Path(args.out)
 
-    print("Cargando base vectorial y encoder...")
-    index, metas = load_base()
+    print(f"Cargando base vectorial de {INDICE_DIR} y encoder...")
+    # Ruta EXPLÍCITA: el default de load_base() sale de config.BASE_VECTORIAL_DIR,
+    # que apunta mal cuando config.py está copiado dentro del paquete.
+    index, metas = load_base(INDICE_DIR)
     encoder = Encoder()
 
     queries = load_queries(queries_path)

@@ -3,41 +3,41 @@ from pathlib import Path
 
 # --- Rutas ---
 ROOT = Path(__file__).resolve().parent
-DATA_DIR = ROOT / "data"                    # corpus crudo de ADL
-ENTREGA_DIR = ROOT / "entrega"              # salida final
+DATA_DIR = ROOT / "data"                 
+ENTREGA_DIR = ROOT / "entrega"             
 BASE_VECTORIAL_DIR = ENTREGA_DIR / "base_vectorial"
 GRAFO_DIR = ENTREGA_DIR / "grafo"
-QUERIES_FILE = ROOT / "queries.jsonl"       # 50 consultas q001-q050 (input)
+QUERIES_FILE = ROOT / "queries.jsonl"      
 RESULTADOS_FILE = ENTREGA_DIR / "resultados.jsonl"
 
 # --- Encoder ---
-# Modelo encoder (familia BERT/XLM-R). Prohibidos decoders (GPT/LLaMA/etc.).
 ENCODER_NAME = "intfloat/multilingual-e5-large"
 ENCODER_SLUG = "e5-large"                    
 EMBED_DIM = 1024
-MAX_INPUT_TOKENS = 512                       # límite del encoder
-# e5 requiere prefijos explícitos:
+MAX_INPUT_TOKENS = 512                     
 E5_QUERY_PREFIX = "query: "
 E5_PASSAGE_PREFIX = "passage: "
-ENCODE_BATCH_SIZE = 32        # tamaño de lote al codificar (ajústalo según RAM/GPU)
+ENCODE_BATCH_SIZE = 32     
 
 # --- Chunking ---
-CHUNK_MAX_TOKENS = 450        # margen bajo el límite de 512 del encoder
-CHUNK_OVERLAP_SENTENCES = 1   # solapamiento (semántica con superposición)
-CHUNK_MIN_TOKENS = 20         # descartar fragmentos demasiado cortos
+CHUNK_MAX_TOKENS = 450        
+CHUNK_OVERLAP_SENTENCES = 1   
+CHUNK_MIN_TOKENS = 20         
 
 # --- Recuperación ---
-TOP_K_CHUNKS_SEARCH = 50      # candidatos a recuperar de FAISS por consulta
-TOP_N_FRAGMENTS = 10          # fragmentos a devolver (NDCG@10)
-TOP_N_DOCUMENTS = 3           # documentos a devolver (F1@3)
-MAX_WORDS_PER_FRAGMENT = 250  # límite duro de palabras por fragmento de salida
-DOC_AGGREGATION = "max"       # "max" | "sum" | "mean" | "topm" (max pooling por defecto)
-TOP_M_CHUNKS_POR_DOC = 3      # solo aplica cuando DOC_AGGREGATION == "topm"
-# Dedup de fragmentos: dos fragmentos con similitud de Jaccard (palabras) >= a
-# este umbral se consideran casi-duplicados (el solapamiento de chunks los crea).
+TOP_K_CHUNKS_SEARCH = 200    
+TOP_N_FRAGMENTS = 10          
+TOP_N_DOCUMENTS = 3          
+MAX_WORDS_PER_FRAGMENT = 250  
+DOC_AGGREGATIONS_VALIDAS = ("max", "sum", "mean", "topm")  
+DOC_AGGREGATION = "max"
+TOP_M_CHUNKS_POR_DOC = 3 
+if DOC_AGGREGATION not in DOC_AGGREGATIONS_VALIDAS:
+    raise ValueError(
+        f"DOC_AGGREGATION = {DOC_AGGREGATION!r} no existe. Opciones: {DOC_AGGREGATIONS_VALIDAS}"
+    )
 DEDUP_JACCARD = 0.8
 
-# --- Formatos soportados -> etiqueta del campo 'formato' de metadata ---
 FORMAT_MAP = {
     ".pdf": "pdf",
     ".html": "html", ".htm": "html",
@@ -52,12 +52,9 @@ FORMAT_MAP = {
 }
 
 # --- Filtros de calidad para formatos ruidosos (OCR de imágenes y mapas PBF) ---
-OCR_MIN_PALABRAS = 8       # mínimo de palabras para que el OCR se considere útil
-OCR_MIN_RATIO_ALFA = 0.6  # proporción mínima de caracteres alfabéticos/espacio
-PBF_PROP_MIN_LEN = 3      # longitud mínima del valor de un atributo para conservarlo
-# Claves técnicas de los vector tiles (pbf) que NO aportan texto con significado:
-# identificadores internos y códigos administrativos (PCODE), no nombres.
-# Basado en la inspección de los pbf reales (Amazon_Underworld).
+OCR_MIN_PALABRAS = 8       
+OCR_MIN_RATIO_ALFA = 0.6  
+PBF_PROP_MIN_LEN = 3     
 PBF_CLAVES_TECNICAS = {
     "fid", "id", "gid", "osm_id", "layer", "zoom", "x", "y",
     "b_adm2_pcode", "b_adm1_pcode", "b_id_concatenated", "au_id_concatenated",
