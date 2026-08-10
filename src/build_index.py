@@ -39,16 +39,27 @@ from src.encode import Encoder
 
 
 
-def collect_fragments(root: Path, tokenizer) -> list[Fragmento]:
+def collect_fragments(root: Path, tokenizer, id_root: Path | None = None) -> list[Fragmento]:
     """Recorre el corpus y devuelve TODOS los fragmentos en un orden estable.
+
+    `id_root` (opcional) es la carpeta contra la que se calculan los doc_id;
+    ver iter_documents. Sirve para indexar por tandas sin cambiar los ids.
     """
     fragmentos: list[Fragmento] = []
-    for doc in iter_documents(root):
+    n_docs = 0
+    for doc in iter_documents(root, id_root):
         doc.texto = clean_document(doc.texto)
         if not doc.texto.strip():
             continue
         idioma = detect_language(doc.texto)
         fragmentos.extend(chunk_document(doc, tokenizer, idioma=idioma))
+        n_docs += 1
+        # La extracción de un corpus grande tarda mucho y no produce salida:
+        # sin esto no hay forma de distinguir "avanzando" de "colgado".
+        if n_docs % 10 == 0:
+            print(f"    {n_docs} docs -> {len(fragmentos)} fragmentos "
+                  f"(último: {doc.fuente[:50]})", flush=True)
+    print(f"    {n_docs} documentos procesados en total.", flush=True)
     return fragmentos
 
 
@@ -96,6 +107,13 @@ def parse_args() -> argparse.Namespace:
         "--batch", type=int, default=ENCODE_BATCH_SIZE,
         help="Tamaño de lote al codificar. Bájalo si hay poca RAM. Por defecto: %(default)s",
     )
+    parser.add_argument(
+        "--root", default=None,
+        help="Carpeta contra la que se calculan los doc_id. Por defecto, la misma "
+             "de --data. Al indexar POR TANDAS (una por fenómeno) hay que pasar "
+             "aquí la raíz del corpus, para que los doc_id salgan idénticos a los "
+             "de una corrida única y no colisionen entre tandas.",
+    )
     return parser.parse_args()
 
 
@@ -108,8 +126,13 @@ def main() -> None:
     enc = Encoder()
     tokenizer = enc.model.tokenizer
 
-    print(f"Recorriendo corpus en {data_dir} ...")
-    fragmentos = collect_fragments(data_dir, tokenizer)
+    if args.root is None:
+        id_root = data_dir
+    else:
+        id_root = Path(args.root)
+
+    print(f"Recorriendo corpus en {data_dir} (doc_id relativos a {id_root}) ...")
+    fragmentos = collect_fragments(data_dir, tokenizer, id_root)
     if not fragmentos:
         print(f"[ERROR] No se generaron fragmentos. ¿Hay documentos en {data_dir}?")
         return

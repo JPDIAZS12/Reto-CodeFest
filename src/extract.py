@@ -126,9 +126,23 @@ def _extract_json(path: Path) -> tuple[str, dict]:
 
 
 def _extract_csv(path: Path) -> str:
-    """Cada fila -> 'col: valor | col: valor'. Celdas vacías se omiten."""
+    """Cada fila -> 'col: valor | col: valor'. Celdas vacías se omiten.
+
+    Los CSV del corpus real no siempre son limpios: hay separadores distintos
+    de la coma y filas con más campos que la cabecera. Antes eso tumbaba el
+    archivo entero ('Expected 1 fields in line 3, saw 3') y se perdía el
+    documento completo. Si el parseo estándar falla, se reintenta dejando que
+    pandas olfatee el separador y saltando las filas rotas: mejor recuperar el
+    90% de un CSV que perderlo del todo.
+    """
     import pandas as pd
-    df = pd.read_csv(path, dtype=str, keep_default_na=False)
+    try:
+        df = pd.read_csv(path, dtype=str, keep_default_na=False)
+    except Exception:
+        df = pd.read_csv(
+            path, dtype=str, keep_default_na=False,
+            sep=None, engine="python", on_bad_lines="skip",
+        )
     lines = []
     for _, row in df.iterrows():
         pairs = [f"{c}: {v}" for c, v in row.items() if str(v).strip()]
@@ -296,10 +310,20 @@ def extract_document(path: Path, root: Path) -> Optional[Documento]:
     )
 
 
-def iter_documents(root: Path):
-    """Recorre el corpus y produce un Documento por archivo soportado."""
+def iter_documents(root: Path, id_root: Path | None = None):
+    """Recorre el corpus y produce un Documento por archivo soportado.
+
+    `root` es la carpeta que se recorre. `id_root` es la carpeta contra la que
+    se calcula el doc_id (por defecto, la misma). Se separan para poder indexar
+    por partes sin cambiar los identificadores: al correr una tanda por
+    fenómeno, `root` es F1_.../ pero `id_root` sigue siendo la raíz del corpus,
+    así que los doc_id salen idénticos a los de una corrida única y no pueden
+    colisionar entre tandas.
+    """
+    if id_root is None:
+        id_root = root
     for path in sorted(root.rglob("*")):
         if path.is_file():
-            doc = extract_document(path, root)
+            doc = extract_document(path, id_root)
             if doc is not None:
                 yield doc

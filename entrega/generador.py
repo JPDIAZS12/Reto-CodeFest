@@ -19,10 +19,20 @@ from pathlib import Path
 # Este script debe correr en DOS disposiciones distintas:
 #   (a) dentro del repo:     <raiz>/entrega/generador.py, con config.py y src/ en <raiz>
 #   (b) en el paquete final: <entrega>/generador.py, con config.py y src/ COPIADOS al lado
-# Se añaden ambas ubicaciones al path; gana la primera que tenga src/.
+#
+# El orden importa: dentro del repo, entrega/ contiene una COPIA de src/ que dejó
+# empaquetar_entrega.py, y si esa copia ganara eclipsaría al src/ real y estarías
+# ejecutando código viejo sin notarlo. Por eso, si el directorio padre parece la
+# raíz del repo (tiene config.py y src/), esa gana; si no, estamos en el paquete
+# entregado y manda el directorio local.
 AQUI = Path(__file__).resolve().parent
-sys.path.insert(0, str(AQUI.parent))
-sys.path.insert(0, str(AQUI))
+ES_REPO = (AQUI.parent / "config.py").exists() and (AQUI.parent / "src").is_dir()
+if ES_REPO:
+    sys.path.insert(0, str(AQUI))
+    sys.path.insert(0, str(AQUI.parent))
+else:
+    sys.path.insert(0, str(AQUI.parent))
+    sys.path.insert(0, str(AQUI))
 
 from config import ENCODER_SLUG, TOP_N_DOCUMENTS, TOP_N_FRAGMENTS
 from src.encode import Encoder
