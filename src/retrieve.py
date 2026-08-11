@@ -95,7 +95,11 @@ def top_documents(
             doc_id = metadata["doc_id"]
             dict_doc_chunks[doc_id].append(similitud)
         for doc_id, similitudes in dict_doc_chunks.items():
-            doc_scores[doc_id] = sum(similitudes[:TOP_M_CHUNKS_POR_DOC])
+            # sorted() y no confiar en el orden del pool: la suma debe ser de
+            # los m MEJORES chunks aunque `scored` llegue desordenado.
+            doc_scores[doc_id] = sum(
+                sorted(similitudes, reverse=True)[:TOP_M_CHUNKS_POR_DOC]
+            )
 
     else:
         raise ValueError(f"Método de agregación a nivel documento no conocido: {DOC_AGGREGATION}")
@@ -179,22 +183,38 @@ def top_fragments(
     n: int = TOP_N_FRAGMENTS,
     max_words: int = MAX_WORDS_PER_FRAGMENT,
 ) -> list[dict]:
-    """Devuelve hasta n fragmentos de salida, cada uno ≤ max_words palabras.
+    """Devuelve exactamente n fragmentos de salida (si el pool lo permite),
+    cada uno ≤ max_words palabras.
+
+    §9.3.2 penaliza los arrays con un número distinto de n elementos, así que
+    entregar n fragmentos prima sobre el filtro de casi-duplicados: si tras la
+    primera pasada con dedup no se llega a n, una segunda pasada rellena con
+    los mejores candidatos descartados por duplicación.
     """
     fragmentos: list[dict] = []
-    textos_incluidos: list[str] = []  
+    textos_incluidos: list[str] = []
+    descartados_por_dedup: list[dict] = []
     for similitud, metadata in scored:
         for sub_fragmento in _split_by_words(metadata["texto"], max_words):
-            if _es_duplicado(sub_fragmento, textos_incluidos):
-                continue
-            fragmentos.append({
+            candidato = {
                 "chunk_id": metadata["chunk_id"],
                 "doc_id": metadata["doc_id"],
                 "text": sub_fragmento,
-            })
+            }
+            if _es_duplicado(sub_fragmento, textos_incluidos):
+                descartados_por_dedup.append(candidato)
+                continue
+            fragmentos.append(candidato)
             textos_incluidos.append(sub_fragmento)
             if len(fragmentos) >= n:
                 return fragmentos
+
+    # Pool insuficiente tras el dedup: rellenar con los descartados (en orden
+    # de similitud, que es el orden en que se acumularon).
+    for candidato in descartados_por_dedup:
+        if len(fragmentos) >= n:
+            break
+        fragmentos.append(candidato)
     return fragmentos
 
 
@@ -212,4 +232,18 @@ def retrieve(
     scored = search(query, index, metas, encoder)
     documentos = top_documents(scored)
     fragmentos = top_fragments(scored)
+
+    # Garantía de esquema (§9.3.2): exactamente TOP_N_DOCUMENTS documentos.
+    # Solo puede faltar si el pool entero tiene menos doc_id distintos que n
+    # (corpus degenerado); se rellena determinísticamente con los primeros
+    # documentos del índice aún no incluidos.
+    if len(documentos) < TOP_N_DOCUMENTS:
+        incluidos = set(documentos)
+        for metadata in metas:
+            if len(documentos) >= TOP_N_DOCUMENTS:
+                break
+            if metadata["doc_id"] not in incluidos:
+                documentos.append(metadata["doc_id"])
+                incluidos.add(metadata["doc_id"])
+
     return {"documents": documentos, "fragments": fragmentos}
