@@ -132,6 +132,35 @@ que el fragmento entregado al evaluador está íntegro. Ocurre en texto sin
 puntuación final: tablas, listas de referencias, PDFs con maquetación rota.
 Magnitud: **[PENDIENTE]** de cuantificar sobre el corpus completo.
 
+### 3.1 Tope de fragmentos por documento
+
+**Decisión: un solo documento aporta como máximo 2.000 fragmentos al índice**
+(`MAX_CHUNKS_POR_DOCUMENTO`).
+
+El corpus incluye volcados bibliográficos en CSV —listados de título y abstract
+de artículos de PubMed— de hasta 35 MB. Uno solo de esos archivos generaba
+**~36.000 fragmentos**, y los cinco juntos rondaban los **110.000: más de la
+mitad de todo el índice, salidos de cinco archivos**.
+
+Tres razones para acotarlo:
+
+1. **Calidad de recuperación.** Un documento con 36.000 fragmentos tiene 36.000
+   oportunidades de producir un chunk con similitud alta por azar, y compite con
+   ventaja injusta en la agregación a nivel documento.
+2. **Diversidad del pool.** Un documento así monopoliza los candidatos y deja
+   fuera a documentos distintos — el mismo problema que ya había obligado a
+   ampliar el pool de 50 a 200 (ver §6.1).
+3. **Costo.** Duplicaba con creces el tiempo de indexación para incorporar
+   listados bibliográficos, que son metadatos de artículos y no texto analítico
+   sobre los fenómenos del reto.
+
+El tope es **general, no una excepción para un archivo concreto**, y está fijado
+donde ningún documento de prosa lo alcanza: el PDF más grande del corpus produce
+unos 500 fragmentos, cuatro veces por debajo del límite. En la práctica solo
+recorta tablas. Los documentos recortados **siguen presentes y siendo
+recuperables**; lo que se pierde son filas adicionales de un listado, no el
+contenido de un documento argumentativo.
+
 ---
 
 ## 4. Encoder (requisito del informe)
@@ -256,8 +285,28 @@ tema equivocado.
 2. Cada chunk se divide en sub-fragmentos de **≤250 palabras sin cortar
    oraciones** (§9.2.1). Los chunks de 450 tokens rondan las 300 palabras, así
    que esta división aplica a la mayoría **[SUBSET: 87%]**.
-3. Se descartan los casi-duplicados (ver §7) y se rellena con el siguiente
+3. **Re-ranking fino:** los sub-fragmentos de los `RERANK_POOL_CHUNKS = 25`
+   mejores chunks se codifican con el **mismo encoder del índice** (prefijo
+   `passage: `) y se reordenan por su **propia** similitud coseno con la
+   consulta. El resto del pool queda como cola de respaldo.
+4. Se descartan los casi-duplicados (ver §7) y se rellena con el siguiente
    candidato, hasta completar 10.
+
+**Por qué re-ranking (decisión).** El NDCG@10 se juzga sobre el **texto del
+sub-fragmento entregado** (§10.2.1), pero la búsqueda gruesa puntúa **chunks de
+~450 tokens**. Sin re-scoring, los sub-fragmentos heredan la posición de su
+chunk padre: cuando un chunk se parte en dos (la mayoría, ver arriba), su mitad
+irrelevante sale en el ranking por delante de la mitad excelente del siguiente
+chunk. Con re-scoring, el orden fino refleja la similitud del texto que
+realmente se evalúa.
+
+**Legalidad verificada.** §8.3 prohíbe modelos *generativos* (decoders); aquí
+solo intervienen el encoder ya usado por el índice y operaciones vectoriales.
+§8.7 permite explícitamente post-filtros que operen directamente sobre los
+vectores. El `chunk_id` reportado sigue siendo el del chunk original del índice
+(trazabilidad, §9.2.1). Costo: ~25–50 codificaciones extra por consulta
+(~1.250–2.500 en las 50), trivial en GPU. Se desactiva con
+`RERANK_FRAGMENTOS = False`, que restaura el comportamiento previo exacto.
 
 ---
 
