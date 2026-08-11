@@ -23,6 +23,8 @@ from config import (
     DOC_AGGREGATION,
     TOP_M_CHUNKS_POR_DOC,
     DEDUP_JACCARD,
+    RERANK_FRAGMENTOS,
+    RERANK_POOL_CHUNKS,
 )
 from src.encode import Encoder
 from src.chunk import split_sentences
@@ -45,13 +47,17 @@ def search(
     metas: list[dict],
     encoder: Encoder,
     k: int = TOP_K_CHUNKS_SEARCH,
+    query_embedding: np.ndarray | None = None,
 ) -> list[tuple[float, dict]]:
     """Busca la consulta y devuelve hasta k pares (similitud, metadata),
     ordenados de mayor a menor similitud.
 
+    `query_embedding` permite reutilizar un embedding ya calculado de la
+    consulta (forma (1, dim)) y evitar codificarla dos veces.
     """
-    embeddings_query = encoder.encode_queries([query]) 
-    distancias, ids = index.search(embeddings_query, k)
+    if query_embedding is None:
+        query_embedding = encoder.encode_queries([query])
+    distancias, ids = index.search(query_embedding, k)
     resultados = []
     for i in range(len(ids[0])):
         if ids[0][i] != -1:
@@ -178,13 +184,29 @@ def _es_duplicado(
     
 
 
-def top_fragments(
+def _sub_candidatos(
     scored: list[tuple[float, dict]],
-    n: int = TOP_N_FRAGMENTS,
-    max_words: int = MAX_WORDS_PER_FRAGMENT,
+    max_words: int,
 ) -> list[dict]:
-    """Devuelve exactamente n fragmentos de salida (si el pool lo permite),
-    cada uno ≤ max_words palabras.
+    """Divide cada chunk del pool en sub-fragmentos ≤ max_words (§9.2.1) y los
+    devuelve como candidatos de salida, preservando el orden recibido.
+
+    El chunk_id de cada candidato es el del chunk ORIGINAL del índice, como
+    exige §9.2.1 (trazabilidad; varios sub-fragmentos comparten chunk_id).
+    """
+    candidatos: list[dict] = []
+    for _, metadata in scored:
+        for sub_fragmento in _split_by_words(metadata["texto"], max_words):
+            candidatos.append({
+                "chunk_id": metadata["chunk_id"],
+                "doc_id": metadata["doc_id"],
+                "text": sub_fragmento,
+            })
+    return candidatos
+
+
+def _seleccionar_con_dedup(candidatos: list[dict], n: int) -> list[dict]:
+    """Toma los primeros n candidatos que no sean casi-duplicados entre sí.
 
     §9.3.2 penaliza los arrays con un número distinto de n elementos, así que
     entregar n fragmentos prima sobre el filtro de casi-duplicados: si tras la
@@ -194,28 +216,70 @@ def top_fragments(
     fragmentos: list[dict] = []
     textos_incluidos: list[str] = []
     descartados_por_dedup: list[dict] = []
-    for similitud, metadata in scored:
-        for sub_fragmento in _split_by_words(metadata["texto"], max_words):
-            candidato = {
-                "chunk_id": metadata["chunk_id"],
-                "doc_id": metadata["doc_id"],
-                "text": sub_fragmento,
-            }
-            if _es_duplicado(sub_fragmento, textos_incluidos):
-                descartados_por_dedup.append(candidato)
-                continue
-            fragmentos.append(candidato)
-            textos_incluidos.append(sub_fragmento)
-            if len(fragmentos) >= n:
-                return fragmentos
+    for candidato in candidatos:
+        if _es_duplicado(candidato["text"], textos_incluidos):
+            descartados_por_dedup.append(candidato)
+            continue
+        fragmentos.append(candidato)
+        textos_incluidos.append(candidato["text"])
+        if len(fragmentos) >= n:
+            return fragmentos
 
-    # Pool insuficiente tras el dedup: rellenar con los descartados (en orden
-    # de similitud, que es el orden en que se acumularon).
+    # Pool insuficiente tras el dedup: rellenar con los descartados (en el
+    # orden de relevancia en que se acumularon).
     for candidato in descartados_por_dedup:
         if len(fragmentos) >= n:
             break
         fragmentos.append(candidato)
     return fragmentos
+
+
+def top_fragments(
+    scored: list[tuple[float, dict]],
+    n: int = TOP_N_FRAGMENTS,
+    max_words: int = MAX_WORDS_PER_FRAGMENT,
+) -> list[dict]:
+    """Devuelve exactamente n fragmentos de salida (si el pool lo permite),
+    cada uno ≤ max_words palabras, en el orden grueso del pool: los
+    sub-fragmentos heredan la posición de su chunk padre.
+    """
+    return _seleccionar_con_dedup(_sub_candidatos(scored, max_words), n)
+
+
+def top_fragments_rerank(
+    scored: list[tuple[float, dict]],
+    query_embedding: np.ndarray,
+    encoder: Encoder,
+    n: int = TOP_N_FRAGMENTS,
+    max_words: int = MAX_WORDS_PER_FRAGMENT,
+    pool_chunks: int = RERANK_POOL_CHUNKS,
+) -> list[dict]:
+    """Como top_fragments, pero re-ordena a grano fino los sub-fragmentos de
+    los `pool_chunks` mejores chunks según su PROPIA similitud con la consulta.
+
+    Motivo: la búsqueda gruesa puntúa chunks de ~450 tokens, pero el NDCG@10 se
+    juzga sobre el texto de sub-fragmentos ≤250 palabras (§10.2.1). Sin
+    re-scoring, los sub-fragmentos heredan el orden del chunk padre y la mitad
+    irrelevante de un buen chunk sale antes que la mitad excelente del
+    siguiente.
+
+    Cumplimiento: usa exclusivamente el MISMO encoder del índice (prefijo
+    "passage: ") y operaciones vectoriales — §8.3 solo prohíbe modelos
+    generativos, y §8.7 permite post-filtros que operen directamente sobre los
+    vectores. El chunk_id reportado sigue siendo el del chunk original (§9.2.1).
+    """
+    finos = _sub_candidatos(scored[:pool_chunks], max_words)
+    if finos:
+        embeddings = encoder.encode_passages([c["text"] for c in finos])
+        # Vectores normalizados: producto interno = similitud coseno (§8.2).
+        similitudes = embeddings @ query_embedding[0]
+        orden = np.argsort(-similitudes)
+        finos = [finos[i] for i in orden]
+
+    # Cola de garantía: el resto del pool en orden grueso, solo por si el dedup
+    # descarta tantos candidatos finos que no se llega a n (§9.3.2).
+    cola = _sub_candidatos(scored[pool_chunks:], max_words)
+    return _seleccionar_con_dedup(finos + cola, n)
 
 
 
@@ -229,9 +293,15 @@ def retrieve(
 
     Los rangos (rank) y el envoltorio JSON final los añade generador.py.
     """
-    scored = search(query, index, metas, encoder)
+    # El embedding de la consulta se calcula UNA vez y se reutiliza en la
+    # búsqueda gruesa y en el re-ranking fino.
+    query_embedding = encoder.encode_queries([query])
+    scored = search(query, index, metas, encoder, query_embedding=query_embedding)
     documentos = top_documents(scored)
-    fragmentos = top_fragments(scored)
+    if RERANK_FRAGMENTOS:
+        fragmentos = top_fragments_rerank(scored, query_embedding, encoder)
+    else:
+        fragmentos = top_fragments(scored)
 
     # Garantía de esquema (§9.3.2): exactamente TOP_N_DOCUMENTS documentos.
     # Solo puede faltar si el pool entero tiene menos doc_id distintos que n

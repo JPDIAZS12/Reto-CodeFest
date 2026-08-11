@@ -44,6 +44,16 @@ if DOC_AGGREGATION not in DOC_AGGREGATIONS_VALIDAS:
     )
 DEDUP_JACCARD = 0.8
 
+# --- Re-ranking fino de sub-fragmentos ---
+# La búsqueda gruesa puntúa chunks de ~450 tokens, pero la salida son
+# sub-fragmentos de ≤250 palabras y el NDCG@10 se juzga sobre ese texto (§10.2.1).
+# Con el re-ranking, cada sub-fragmento de los mejores chunks se codifica con el
+# MISMO encoder del índice y se ordena por su propia similitud con la consulta.
+# Es un post-filtro sobre vectores (permitido por §8.7); no interviene ningún
+# modelo generativo (§8.3).
+RERANK_FRAGMENTOS = True   # False = orden heredado del chunk padre (comportamiento previo)
+RERANK_POOL_CHUNKS = 25    # cuántos chunks del pool reciben re-scoring fino
+
 FORMAT_MAP = {
     ".pdf": "pdf",
     ".html": "html", ".htm": "html",
