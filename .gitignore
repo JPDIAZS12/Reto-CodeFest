@@ -15,6 +15,7 @@ entrega/grafo/
 entrega/config.py
 entrega/src/
 entrega/queries.jsonl
+entrega/consultas.jsonl
 
 # Python
 __pycache__/
