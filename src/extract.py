@@ -9,8 +9,11 @@ from typing import Optional
 
 from config import (
     FORMAT_MAP,
+    OCR_IDIOMAS,
     OCR_MIN_PALABRAS,
     OCR_MIN_RATIO_ALFA,
+    PDF_OCR_FALLBACK,
+    PDF_OCR_DPI,
     PBF_PROP_MIN_LEN,
     PBF_CLAVES_TECNICAS,
 )
@@ -47,12 +50,52 @@ def _make_doc_id(path: Path, root: Path) -> str:
 
 
 
+def _ocr_pagina(page) -> str:
+    """OCR de UNA página de PDF que no trae capa de texto.
+
+    Se renderiza la página a imagen y se pasa por Tesseract. Reutiliza el mismo
+    filtro de calidad que el OCR de imágenes sueltas: si el resultado parece
+    ruido, se descarta.
+    """
+    try:
+        import io
+        import pytesseract
+        from PIL import Image
+    except ImportError:
+        return ""
+    try:
+        pix = page.get_pixmap(dpi=PDF_OCR_DPI)
+        texto = pytesseract.image_to_string(
+            Image.open(io.BytesIO(pix.tobytes("png"))), lang=OCR_IDIOMAS
+        )
+    except Exception:
+        return ""
+    texto = texto.strip()
+    if not texto or not _ocr_es_util(texto):
+        return ""
+    return texto
+
+
 def _extract_pdf(path: Path) -> str:
-    import fitz  
+    """Texto de un PDF, con respaldo por OCR para páginas escaneadas.
+
+    Buena parte de los informes del corpus (las Alertas Tempranas de la
+    Defensoría, sobre todo) son escaneos sin capa de texto: `get_text` devuelve
+    cadena vacía y el documento entero se perdía en silencio. Cuando una página
+    no da texto se recurre al OCR.
+
+    El respaldo solo se activa página por página y solo cuando no hay texto, así
+    que los PDFs normales no pagan ningún costo.
+    """
+    import fitz
     parts = []
     with fitz.open(path) as doc:
         for page in doc:
-            parts.append(page.get_text("text"))
+            texto = page.get_text("text")
+            if texto.strip():
+                parts.append(texto)
+            elif PDF_OCR_FALLBACK:
+                parts.append(_ocr_pagina(page))
     return "\n".join(parts)
 
 
@@ -203,7 +246,7 @@ def _extract_image(path: Path) -> str:
     except ImportError:
         return ""
     try:
-        texto = pytesseract.image_to_string(Image.open(path), lang="spa+eng+por")
+        texto = pytesseract.image_to_string(Image.open(path), lang=OCR_IDIOMAS)
     except Exception:
         return ""
     texto = texto.strip()

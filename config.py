@@ -22,7 +22,13 @@ ENCODE_BATCH_SIZE = 32
 # --- Chunking ---
 CHUNK_MAX_TOKENS = 450        
 CHUNK_OVERLAP_SENTENCES = 1   
-CHUNK_MIN_TOKENS = 20         
+CHUNK_MIN_TOKENS = 20
+# Tope de fragmentos que un SOLO documento puede aportar al índice. Evita que un
+# archivo tabular gigante domine el índice y monopolice el pool de candidatos:
+# los CSV bibliográficos de PubMed rinden ~110.000 fragmentos entre 5 archivos.
+# Ningún PDF del corpus se acerca a este tope (el mayor ronda los 500), así que
+# en la práctica solo recorta tablas.
+MAX_CHUNKS_POR_DOCUMENTO = 2000
 
 # --- Recuperación ---
 TOP_K_CHUNKS_SEARCH = 200    
@@ -52,7 +58,15 @@ FORMAT_MAP = {
 }
 
 # --- Filtros de calidad para formatos ruidosos (OCR de imágenes y mapas PBF) ---
-OCR_MIN_PALABRAS = 8       
+OCR_IDIOMAS = "spa+eng+por"  # modelos de Tesseract (apt: tesseract-ocr-spa/-por)
+# Respaldo por OCR para PDFs escaneados: si una página no trae capa de texto, se
+# renderiza y se pasa por Tesseract. 47 de los 62 PDFs de Alertas_Tempranas son
+# escaneos y se perdían enteros (367 MB de informes sobre grupos armados, la
+# fuente más pertinente del fenómeno 3). Solo actúa en páginas sin texto, así
+# que los PDFs normales no pagan ningún costo.
+PDF_OCR_FALLBACK = True
+PDF_OCR_DPI = 200          # buen OCR sin disparar el tiempo por página (~3 s/pág)
+OCR_MIN_PALABRAS = 8
 OCR_MIN_RATIO_ALFA = 0.6  
 PBF_PROP_MIN_LEN = 3     
 PBF_CLAVES_TECNICAS = {

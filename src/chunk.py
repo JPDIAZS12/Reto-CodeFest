@@ -13,6 +13,7 @@ from config import (
     CHUNK_MAX_TOKENS,
     CHUNK_OVERLAP_SENTENCES,
     CHUNK_MIN_TOKENS,
+    MAX_CHUNKS_POR_DOCUMENTO,
 )
 
 
@@ -60,22 +61,27 @@ def group_sentences(
     tokenizer,
     max_tokens: int,
     overlap: int,
+    max_chunks: int | None = None,
 ) -> list[str]:
     """Agrupa oraciones consecutivas en textos de chunk.
+
+    `max_chunks` corta la generación al alcanzar ese número de chunks. Se corta
+    AQUÍ y no después para no tokenizar el documento entero: un CSV de 35 MB
+    tiene cientos de miles de oraciones y contarlas todas cuesta minutos de CPU
+    que se tirarían a la basura.
 
     Devuelve: lista de textos de chunk, en orden.
     """
     chunks = []
 
-    # Contar los tokens de cada oración UNA sola vez. Antes se re-tokenizaba
-    # todo el buffer en cada paso (costo cuadrático); ahora se lleva una suma
-    # corriente sumando el conteo por oración, ya calculado aquí.
-    tokens_por_oracion = [count_tokens(oracion, tokenizer) for oracion in sentences]
-
     buffer = []          # lista de (oracion, n_tokens) del chunk en construcción
     tokens_buffer = 0    # suma de tokens de las oraciones del buffer
 
-    for oracion, n_tokens in zip(sentences, tokens_por_oracion):
+    for oracion in sentences:
+        # Cada oración se cuenta UNA sola vez (antes se re-tokenizaba todo el
+        # buffer en cada paso, costo cuadrático). Se cuenta dentro del bucle, y
+        # no en una lista previa, para poder abandonar temprano con max_chunks.
+        n_tokens = count_tokens(oracion, tokenizer)
         # ¿Agregar esta oración haría que el chunk actual supere el límite?
         if buffer and tokens_buffer + n_tokens > max_tokens:
             # Cerrar el chunk actual con lo acumulado
@@ -102,10 +108,15 @@ def group_sentences(
             buffer = []
             tokens_buffer = 0
 
+        if max_chunks is not None and len(chunks) >= max_chunks:
+            return chunks[:max_chunks]
+
     # Emitir cualquier oración restante en el buffer como un chunk final
     if buffer:
         texto_chunk_final = " ".join(s for s, _ in buffer)
         chunks.append(texto_chunk_final)
+    if max_chunks is not None:
+        return chunks[:max_chunks]
     return chunks
 
 
@@ -120,6 +131,7 @@ def chunk_document(doc, tokenizer, idioma: str = "") -> list[Fragmento]:
         sentences, tokenizer,
         max_tokens=CHUNK_MAX_TOKENS,
         overlap=CHUNK_OVERLAP_SENTENCES,
+        max_chunks=MAX_CHUNKS_POR_DOCUMENTO,
     )
 
     fragmentos: list[Fragmento] = []
