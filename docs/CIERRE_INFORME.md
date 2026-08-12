@@ -6,8 +6,12 @@ calcular nada a mano.
 
 **Requisito previo:** la corrida del corpus completo terminada, es decir:
 `entrega/base_vectorial/encoder_e5-large/` (índice fusionado) y
-`entrega/resultados.jsonl` (50 consultas). Para el hueco del grafo, además
-`entrega/grafo/grafo.graphml`.
+`entrega/resultados.jsonl` (50 consultas).
+
+> **Nota:** esta versión del informe NO incluye el grafo de conocimiento
+> (componente bonus §7 del reto, no corrido a tiempo). Si el grafo llegara a
+> existir antes de entregar, revertir el merge de `docs/informe-sin-grafo` y
+> usar `scripts/informe_grafo.py` para su hueco.
 
 ---
 
@@ -18,8 +22,7 @@ calcular nada a mano.
 | 2 | % de chunks >512 tokens (§2, caso borde) | `python scripts/informe_indice.py --indice entrega/base_vectorial/encoder_e5-large` | sección **B. CHUNKING**, línea de chunks que superan los tokens del encoder (dividir por "chunks totales" de la sección A) |
 | 3 | Confirmar `max` pooling (§5.2) | `python scripts/comparar_agregacion.py --indice entrega/base_vectorial/encoder_e5-large` | **RESUMEN**: % de consultas cuyo top-3 difiere por estrategia. Regla acordada: se mantiene `max` salvo que otra estrategia reduzca claramente los documentos del tema equivocado (revisar el DETALLE a ojo) |
 | 4 | Tabla comparativa de agregación (§5.2) | el mismo comando del punto 3 | copiar la tabla del RESUMEN (estrategia / difieren / %) |
-| 5 | Dimensiones del grafo (§6) | `python scripts/informe_grafo.py` | todo el bloque: entidades, relaciones, % tipadas vs. genéricas |
-| 6 | Distribución de idiomas (§8, limitación 3) | comando del punto 2 | sección **A. COBERTURA**, tabla "documentos por idioma" |
+| 5 | Distribución de idiomas (§7, limitación 3) | comando del punto 2 | sección **A. COBERTURA**, tabla "documentos por idioma" |
 
 Si al portar el grafo se agregan los tests (`tests/test_graph.py`), actualizar
 también el conteo de casos de §7 del informe:

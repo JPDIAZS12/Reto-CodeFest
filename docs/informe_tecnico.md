@@ -23,7 +23,6 @@ consulta, sin intervención de ningún modelo generativo (§8.3).
 corpus → extract → clean → chunk → encode → FAISS IndexFlatIP + metadata.jsonl
                                                       │
 consulta → encode("query: ") → búsqueda (pool 200) ───┤
-             + grafo de conocimiento (RRF, §8.5) ─────┤
                                                       ├→ top-3 documentos  (F1@3)
                                                       └→ top-10 fragmentos (NDCG@10)
 ```
@@ -98,7 +97,7 @@ criterios de §4.3:
 | Longitud máxima | 512 tokens — condiciona `CHUNK_MAX_TOKENS = 450` |
 | Benchmarks | entre los mejores encoders multilingües en las tablas de *retrieval* de MTEB/BEIR |
 | Licencia | MIT |
-| Eficiencia | 2,2 GB; inviable en CPU para indexar → indexación en GPU (§7 de este informe) |
+| Eficiencia | 2,2 GB; inviable en CPU para indexar → indexación en GPU (§6 de este informe) |
 
 Es un **encoder** (familia BERT), no un decoder, conforme a §4.2. La familia
 e5 exige **prefijos de inferencia**: `"query: "` para consultas y
@@ -192,41 +191,7 @@ nuestra — se usa solo como señal de diagnóstico, nunca en producción).
 
 ---
 
-## 6. Grafo de conocimiento (§7, componente bonus)
-
-Se construye un grafo dirigido de entidades y relaciones sobre los fragmentos
-del índice, siguiendo las tres etapas de §7.2:
-
-1. **NER:** `Davlan/xlm-roberta-base-ner-hrl` (HuggingFace, encoder
-   multilingüe ES/EN/PT — misma familia XLM-R que el encoder principal),
-   aplicado por fragmento.
-2. **Extracción de relaciones:** heurística de patrones lingüísticos — para
-   cada par de entidades del mismo fragmento a distancia ≤200 caracteres
-   (aprox. misma oración), se busca un verbo clave en el texto intermedio
-   (raíces compartidas ES/EN/PT: *desarroll-/develop-*, *regul-*, *amenaz-/
-   threat-*, *financi-/fund-*, etc. → `desarrolla`, `regula`, `amenaza`,
-   `financia`…); sin coincidencia se etiqueta `se_relaciona_con`
-   (co-ocurrencia).
-3. **Construcción:** `networkx.MultiDiGraph`; cada nodo (entidad) y arista
-   (relación) guarda como atributos su **evidencia**: los `doc_id` y
-   `chunk_id` de origen, como exige §7.2 (trazabilidad textual de cada
-   relación). Exportado a `grafo/grafo.graphml` (formato del entregable §1.4).
-
-**Integración con la recuperación (§8.5):** las entidades de la consulta se
-reconocen con el **mismo componente NER** del grafo; se emparejan contra los
-nodos; se toman sus vecinos de primer orden (aristas entrantes y salientes); y
-los chunks de evidencia se puntúan por el número de relaciones relevantes en
-que aparecen. Ese pool del grafo se fusiona con el ranking vectorial de FAISS
-mediante **Reciprocal Rank Fusion** (§8.4, Ec. 7, k₀ = 60), tratando el grafo
-como un índice adicional — RRF combina por rango, lo que resuelve la
-diferencia de escala entre puntuaciones del grafo y similitudes coseno.
-
-Dimensiones del grafo sobre el corpus completo: [COMPLETAR: nº entidades, nº
-relaciones, % de aristas tipadas vs. genéricas].
-
----
-
-## 7. Indexación a escala y reproducibilidad
+## 6. Indexación a escala y reproducibilidad
 
 **Hardware:** sin GPU local. e5-large en CPU es inviable para indexar (la
 estimación superaba los días) → **indexación en Google Colab (GPU T4)**, en
@@ -253,7 +218,7 @@ Cada módulo tiene además pruebas automáticas (119 casos en 8 archivos de
 
 ---
 
-## 8. Limitaciones conocidas
+## 7. Limitaciones conocidas
 
 Decisiones informadas, no descuidos:
 
