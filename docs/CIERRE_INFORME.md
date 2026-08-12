@@ -3,20 +3,19 @@
 Estado: el informe ya es **entregable sin números de la corrida final**. Los
 antiguos huecos `[COMPLETAR]` de chunking, agregación e idiomas se
 reescribieron en forma cualitativa y verificable (cada afirmación apunta al
-script que la reproduce). Queda **un solo hueco**, y solo en la versión con
-grafo.
+script que la reproduce). En esta versión **no queda ningún hueco**:
+`generar_pdf.py --estricto` debe pasar limpio.
+
+> **Nota:** esta versión del informe NO incluye el grafo de conocimiento
+> (componente bonus §7 del reto, no corrido a tiempo). Si el grafo llegara a
+> existir antes de entregar, revertir el merge de `docs/informe-sin-grafo` y
+> usar `scripts/informe_grafo.py` para su hueco.
 
 **Lo verdaderamente obligatorio (§1.4) no es del informe:** son
 `entrega/resultados.jsonl` y `entrega/base_vectorial/` — salen únicamente de
 la corrida en Colab (celda de cierre).
 
 ---
-
-## Único hueco restante
-
-| Hueco | Dónde | Cómo se resuelve |
-|---|---|---|
-| Dimensiones del grafo (§6) | solo en `main` (versión con grafo) | **Si el grafo llega:** `python scripts/informe_grafo.py` e insertar el bloque. **Si no llega al corte (jueves 10:00):** mergear PR #8 (`docs/informe-sin-grafo`), que elimina la sección y deja el informe en 0 huecos. |
 
 ## Mejoras opcionales (si llegan los números de Colab)
 
@@ -27,10 +26,10 @@ reemplaza una frase cualitativa por el número real:
 |---|---|---|
 | §2 caso borde | `python scripts/informe_indice.py --indice entrega/base_vectorial/encoder_e5-large` | sección **B. CHUNKING**: % de chunks >512 tokens |
 | §5.2 agregación | `python scripts/comparar_agregacion.py --indice entrega/base_vectorial/encoder_e5-large` | tabla del **RESUMEN** (estrategia / difieren / %); confirmar que `max` se mantiene |
-| §8 limitación 3 | el mismo `informe_indice.py` | sección **A. COBERTURA**: documentos por idioma |
+| §7 limitación 3 | el mismo `informe_indice.py` | sección **A. COBERTURA**: documentos por idioma |
 
 Si se agregan tests del grafo (`tests/test_graph.py`), recontar los casos de
-§7 del informe:
+§6 del informe:
 
 ```
 for f in tests/test_*.py; do grep -c "^\s*check(" "$f"; done | paste -sd+ | bc
@@ -47,8 +46,7 @@ python scripts/generar_pdf.py --estricto
 - Convierte `docs/informe_tecnico.md` → `entrega/informe_tecnico.pdf` (sin
   pandoc: markdown + Chrome headless).
 - `--estricto` falla si queda algún `[COMPLETAR]` o si el PDF excede las
-  **8 páginas** (§1.4). En `main` avisará el hueco del grafo hasta que se
-  resuelva; en la rama `docs/informe-sin-grafo` debe pasar limpio.
+  **8 páginas** (§1.4). En esta rama debe pasar limpio.
 
 ## Último paso
 
