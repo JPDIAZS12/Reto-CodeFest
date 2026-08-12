@@ -21,6 +21,7 @@ from config import (
     TOP_N_DOCUMENTS,
     MAX_WORDS_PER_FRAGMENT,
     DOC_AGGREGATION,
+    GRAPH_RRF_K0,
     TOP_M_CHUNKS_POR_DOC,
     DEDUP_JACCARD,
     RERANK_FRAGMENTOS,
@@ -65,6 +66,33 @@ def search(
     
     return resultados
     
+
+
+def combine_rrf(
+    ranked_lists: list[list[tuple[float, dict]]],
+    k0: int = GRAPH_RRF_K0,
+) -> list[tuple[float, dict]]:
+    """Reciprocal Rank Fusion (Sección 8.4, Ecuación 7).
+
+    Combina varias listas ya ordenadas de mayor a menor puntuación (cada
+    elemento (score, metadata)) en una sola lista fusionada, usando el RANGO
+    de cada fragmento en cada lista en vez de su puntuación cruda. Esto es lo
+    que permite tratar el pool del grafo de conocimiento (Sección 8.5) como
+    "un índice adicional" pese a tener una escala de puntuación distinta a la
+    similitud coseno de FAISS.
+
+    Cada fragmento se identifica por su chunk_id.
+    """
+    rrf_scores: dict[str, float] = defaultdict(float)
+    meta_by_id: dict[str, dict] = {}
+    for lista in ranked_lists:
+        for rank, (_, metadata) in enumerate(lista, start=1):
+            chunk_id = metadata["chunk_id"]
+            meta_by_id[chunk_id] = metadata
+            rrf_scores[chunk_id] += 1.0 / (k0 + rank)
+
+    combinados = sorted(rrf_scores.items(), key=lambda kv: kv[1], reverse=True)
+    return [(score, meta_by_id[chunk_id]) for chunk_id, score in combinados]
 
 
 def top_documents(
@@ -288,8 +316,17 @@ def retrieve(
     index: faiss.Index,
     metas: list[dict],
     encoder: Encoder,
+    graph=None,
+    entity_index: dict[str, str] | None = None,
+    metas_by_chunk: dict[str, dict] | None = None,
 ) -> dict:
     """Devuelve {"documents": [doc_id,...], "fragments": [{chunk_id,doc_id,text},...]}.
+
+    Si se pasa `graph` (nx.MultiDiGraph construido por src.graph.build_graph),
+    se complementa la búsqueda vectorial con el pool de candidatos del grafo
+    de conocimiento (Sección 8.5), fusionado mediante RRF (Sección 8.4).
+    Sin `graph`, el comportamiento es idéntico al de la recuperación puramente
+    vectorial.
 
     Los rangos (rank) y el envoltorio JSON final los añade generador.py.
     """
@@ -297,6 +334,15 @@ def retrieve(
     # búsqueda gruesa y en el re-ranking fino.
     query_embedding = encoder.encode_queries([query])
     scored = search(query, index, metas, encoder, query_embedding=query_embedding)
+
+    if graph is not None:
+        from src.graph import graph_candidates
+        if metas_by_chunk is None:
+            metas_by_chunk = {m["chunk_id"]: m for m in metas}
+        candidatos_grafo = graph_candidates(query, graph, metas_by_chunk, entity_index)
+        if candidatos_grafo:
+            scored = combine_rrf([scored, candidatos_grafo])
+
     documentos = top_documents(scored)
     if RERANK_FRAGMENTOS:
         fragmentos = top_fragments_rerank(scored, query_embedding, encoder)

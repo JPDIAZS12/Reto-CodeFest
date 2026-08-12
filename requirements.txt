@@ -20,7 +20,8 @@ pillow>=10.0.0
 pytesseract>=0.3.10
 
 # === Grafo de conocimiento (bonus) ===
-networkx>=3.2
+networkx>=3.2             # construcción y export a GraphML
+# NER multilingüe (src/graph.py) reutiliza transformers (pipeline de token-classification)
 
 # === Informe (opcional, para generar el PDF) ===
 # reportlab>=4.0.0

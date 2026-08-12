@@ -40,7 +40,13 @@ else:
     sys.path.insert(0, str(AQUI.parent))
     sys.path.insert(0, str(AQUI))
 
-from config import ENCODER_SLUG, TOP_N_DOCUMENTS, TOP_N_FRAGMENTS
+from config import (
+    GRAFO_DIR,
+    USE_GRAPH,
+    ENCODER_SLUG,
+    TOP_N_DOCUMENTS,
+    TOP_N_FRAGMENTS,
+)
 from src.encode import Encoder
 from src.retrieve import load_base, retrieve
 
@@ -51,6 +57,20 @@ from src.retrieve import load_base, retrieve
 # esté, y coincide con la invocación desde la raíz de la entrega que exige §1.5.
 BASE_VECTORIAL_DEFECTO = AQUI / "base_vectorial"
 RESULTADOS_DEFECTO = AQUI / "resultados.jsonl"
+
+def load_graph_if_available():
+    """Carga el grafo de conocimiento opcional (Sección 7) si fue construido
+    con `python -m src.graph`. Si no existe, la recuperación sigue siendo
+    puramente vectorial (el grafo es un componente bonus, no obligatorio).
+    """
+    ruta = GRAFO_DIR / "grafo.graphml"
+    if not USE_GRAPH or not ruta.exists():
+        return None, None
+    from src.graph import load_graph, build_entity_index
+    print(f"Grafo de conocimiento encontrado en {ruta}, se usará como señal adicional.")
+    grafo = load_graph(ruta)
+    return grafo, build_entity_index(grafo)
+
 
 # El contrato nombra el archivo de consultas "consultas.jsonl" en la raíz de la
 # entrega. Durante el desarrollo dentro del repo se llama queries.jsonl y vive
@@ -160,6 +180,7 @@ def main() -> None:
     # que apunta mal cuando config.py está copiado dentro del paquete.
     index, metas = load_base(indice_dir)
     encoder = Encoder()
+    grafo, entity_index = load_graph_if_available()
 
     queries = load_queries(queries_path)
     print(f"{len(queries)} consultas leídas de {queries_path.name}")
@@ -167,7 +188,7 @@ def main() -> None:
     out_path.parent.mkdir(parents=True, exist_ok=True)
     with open(out_path, "w", encoding="utf-8") as salida:
         for query_id, texto in queries:
-            retrieved = retrieve(texto, index, metas, encoder)
+            retrieved = retrieve(texto, index, metas, encoder, graph=grafo, entity_index=entity_index)
             obj = build_result_object(query_id, retrieved)
             salida.write(json.dumps(obj, ensure_ascii=False) + "\n")
 
