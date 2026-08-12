@@ -77,8 +77,9 @@ El híbrido conserva unidades semánticas completas y de tamaño suficiente.
 emite como chunk propio (dividirla violaría §3.3). Si supera los 512 tokens
 del encoder, e5 trunca el vector, pero **el texto completo queda en la
 metadata**, de modo que el fragmento entregado está íntegro. Ocurre en texto
-sin puntuación final (tablas, referencias). Magnitud sobre el corpus completo:
-[COMPLETAR: % de chunks >512 tokens].
+sin puntuación final (tablas, referencias) y es minoritario por construcción
+(solo lo dispara una oración indivisible de más de 450 tokens);
+`scripts/informe_indice.py` reporta su magnitud exacta sobre el índice.
 
 Cada fragmento almacena la metadata obligatoria de la Tabla 2 (§3.4):
 `doc_id`, `chunk_id`, `fuente`, `formato`, `fenomeno`, `posicion`,
@@ -155,13 +156,14 @@ Se implementaron y compararon cuatro estrategias (`max`, `sum`, `mean`,
 (m≥nº chunks del documento) — verificado empíricamente como control de validez
 del experimento.
 
-**Decisión: `max` pooling** [COMPLETAR: confirmar con corrida final], por ser
+**Decisión: `max` pooling**, por ser
 la única estrategia **neutral a la longitud del documento** en un corpus
 extremadamente heterogéneo (JSON cortos vs. PDFs de cientos de páginas), donde
 un sesgo sistemático con solo 3 cupos es caro. `mean` quedó descartada con
-datos (peor coherencia temática, empeora al ampliar el pool). Comparación
-sobre las 50 consultas reales: [COMPLETAR: tabla con corrida final; en el
-subset de prueba, `max` 84% de coherencia temática vs `mean` 77%].
+datos (peor coherencia temática, empeora al ampliar el pool). En el
+subconjunto de validación, `max` obtuvo **84 % de coherencia temática frente a
+77 % de `mean`**; `scripts/comparar_agregacion.py` reproduce la comparación de
+las cuatro estrategias sobre las 50 consultas y el índice final.
 
 ### 5.3 Selección de fragmentos y re-ranking fino
 
@@ -264,7 +266,9 @@ Decisiones informadas, no descuidos:
 2. **Chunks que exceden 512 tokens** se truncan al codificar; el texto
    entregado está completo, el vector no lo representa entero (§2).
 3. **El corpus no es estrictamente trilingüe** (FR/RU/AR/ZH presentes); e5
-   los indexa por ser multilingüe. Distribución exacta: [COMPLETAR].
+   los indexa por ser multilingüe. La metadata registra el `idioma` de cada
+   fragmento, de modo que la distribución es auditable con
+   `scripts/informe_indice.py`.
 4. **La asignación de fenómeno por consulta es inferencia del equipo**
    (deducida del PDF de preguntas y verificada a mano); se usa solo como
    diagnóstico, nunca como filtro en producción.

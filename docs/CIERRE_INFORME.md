@@ -1,28 +1,36 @@
 # Checklist de cierre del informe técnico
 
-Cómo llenar cada hueco `[COMPLETAR]` de `docs/informe_tecnico.md` y generar el
-PDF final. Todos los números salen de comandos ya escritos — nadie tiene que
-calcular nada a mano.
+Estado: el informe ya es **entregable sin números de la corrida final**. Los
+antiguos huecos `[COMPLETAR]` de chunking, agregación e idiomas se
+reescribieron en forma cualitativa y verificable (cada afirmación apunta al
+script que la reproduce). Queda **un solo hueco**, y solo en la versión con
+grafo.
 
-**Requisito previo:** la corrida del corpus completo terminada, es decir:
-`entrega/base_vectorial/encoder_e5-large/` (índice fusionado) y
-`entrega/resultados.jsonl` (50 consultas). Para el hueco del grafo, además
-`entrega/grafo/grafo.graphml`.
+**Lo verdaderamente obligatorio (§1.4) no es del informe:** son
+`entrega/resultados.jsonl` y `entrega/base_vectorial/` — salen únicamente de
+la corrida en Colab (celda de cierre).
 
 ---
 
-## Huecos y su comando
+## Único hueco restante
 
-| # | Hueco (sección del informe) | Comando | Dónde mirar en la salida |
-|---|---|---|---|
-| 2 | % de chunks >512 tokens (§2, caso borde) | `python scripts/informe_indice.py --indice entrega/base_vectorial/encoder_e5-large` | sección **B. CHUNKING**, línea de chunks que superan los tokens del encoder (dividir por "chunks totales" de la sección A) |
-| 3 | Confirmar `max` pooling (§5.2) | `python scripts/comparar_agregacion.py --indice entrega/base_vectorial/encoder_e5-large` | **RESUMEN**: % de consultas cuyo top-3 difiere por estrategia. Regla acordada: se mantiene `max` salvo que otra estrategia reduzca claramente los documentos del tema equivocado (revisar el DETALLE a ojo) |
-| 4 | Tabla comparativa de agregación (§5.2) | el mismo comando del punto 3 | copiar la tabla del RESUMEN (estrategia / difieren / %) |
-| 5 | Dimensiones del grafo (§6) | `python scripts/informe_grafo.py` | todo el bloque: entidades, relaciones, % tipadas vs. genéricas |
-| 6 | Distribución de idiomas (§8, limitación 3) | comando del punto 2 | sección **A. COBERTURA**, tabla "documentos por idioma" |
+| Hueco | Dónde | Cómo se resuelve |
+|---|---|---|
+| Dimensiones del grafo (§6) | solo en `main` (versión con grafo) | **Si el grafo llega:** `python scripts/informe_grafo.py` e insertar el bloque. **Si no llega al corte (jueves 10:00):** mergear PR #8 (`docs/informe-sin-grafo`), que elimina la sección y deja el informe en 0 huecos. |
 
-Si al portar el grafo se agregan los tests (`tests/test_graph.py`), actualizar
-también el conteo de casos de §7 del informe:
+## Mejoras opcionales (si llegan los números de Colab)
+
+No bloquean la entrega; solo hacen el informe más contundente. Cada una
+reemplaza una frase cualitativa por el número real:
+
+| Sección | Comando | Qué copiar |
+|---|---|---|
+| §2 caso borde | `python scripts/informe_indice.py --indice entrega/base_vectorial/encoder_e5-large` | sección **B. CHUNKING**: % de chunks >512 tokens |
+| §5.2 agregación | `python scripts/comparar_agregacion.py --indice entrega/base_vectorial/encoder_e5-large` | tabla del **RESUMEN** (estrategia / difieren / %); confirmar que `max` se mantiene |
+| §8 limitación 3 | el mismo `informe_indice.py` | sección **A. COBERTURA**: documentos por idioma |
+
+Si se agregan tests del grafo (`tests/test_graph.py`), recontar los casos de
+§7 del informe:
 
 ```
 for f in tests/test_*.py; do grep -c "^\s*check(" "$f"; done | paste -sd+ | bc
@@ -39,9 +47,8 @@ python scripts/generar_pdf.py --estricto
 - Convierte `docs/informe_tecnico.md` → `entrega/informe_tecnico.pdf` (sin
   pandoc: markdown + Chrome headless).
 - `--estricto` falla si queda algún `[COMPLETAR]` o si el PDF excede las
-  **8 páginas** (§1.4). Sin la bandera solo avisa.
-- Con el borrador actual el PDF ocupa **5 páginas**: hay ~3 de margen para la
-  tabla de agregación y los números del grafo.
+  **8 páginas** (§1.4). En `main` avisará el hueco del grafo hasta que se
+  resuelva; en la rama `docs/informe-sin-grafo` debe pasar limpio.
 
 ## Último paso
 
