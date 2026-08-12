@@ -23,11 +23,7 @@ ENCODE_BATCH_SIZE = 32
 CHUNK_MAX_TOKENS = 450        
 CHUNK_OVERLAP_SENTENCES = 1   
 CHUNK_MIN_TOKENS = 20
-# Tope de fragmentos que un SOLO documento puede aportar al índice. Evita que un
-# archivo tabular gigante domine el índice y monopolice el pool de candidatos:
-# los CSV bibliográficos de PubMed rinden ~110.000 fragmentos entre 5 archivos.
-# Ningún PDF del corpus se acerca a este tope (el mayor ronda los 500), así que
-# en la práctica solo recorta tablas.
+# Tope por documento: evita que un CSV gigante copie el índice y el pool.
 MAX_CHUNKS_POR_DOCUMENTO = 2000
 
 # --- Recuperación ---
@@ -36,7 +32,7 @@ TOP_N_FRAGMENTS = 10
 TOP_N_DOCUMENTS = 3          
 MAX_WORDS_PER_FRAGMENT = 250  
 DOC_AGGREGATIONS_VALIDAS = ("max", "sum", "mean", "topm")  
-DOC_AGGREGATION = "max"
+DOC_AGGREGATION = "topm"
 TOP_M_CHUNKS_POR_DOC = 3 
 if DOC_AGGREGATION not in DOC_AGGREGATIONS_VALIDAS:
     raise ValueError(
@@ -57,15 +53,11 @@ FORMAT_MAP = {
     ".pbf": "pbf",
 }
 
-# --- Filtros de calidad para formatos ruidosos (OCR de imágenes y mapas PBF) ---
-OCR_IDIOMAS = "spa+eng+por"  # modelos de Tesseract (apt: tesseract-ocr-spa/-por)
-# Respaldo por OCR para PDFs escaneados: si una página no trae capa de texto, se
-# renderiza y se pasa por Tesseract. 47 de los 62 PDFs de Alertas_Tempranas son
-# escaneos y se perdían enteros (367 MB de informes sobre grupos armados, la
-# fuente más pertinente del fenómeno 3). Solo actúa en páginas sin texto, así
-# que los PDFs normales no pagan ningún costo.
+# --- Filtros de calidad (OCR e imágenes, mapas PBF) ---
+OCR_IDIOMAS = "spa+eng+por"
+# OCR de respaldo para páginas de PDF sin capa de texto (escaneos).
 PDF_OCR_FALLBACK = True
-PDF_OCR_DPI = 200          # buen OCR sin disparar el tiempo por página (~3 s/pág)
+PDF_OCR_DPI = 200
 OCR_MIN_PALABRAS = 8
 OCR_MIN_RATIO_ALFA = 0.6  
 PBF_PROP_MIN_LEN = 3     

@@ -10,7 +10,7 @@ from collections import Counter
 _CONTROL_RE = re.compile(r"[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]")
 _MULTISPACE_RE = re.compile(r"[ \t ]+")
 _MULTINEWLINE_RE = re.compile(r"\n{3,}")
-# Numeración de página tipo "12", "- 12 -", "Página 12"
+# Numeración de página
 _PAGE_NUM_RE = re.compile(r"^\s*(?:p[áa]gina\s*)?[-–]?\s*\d+\s*[-–]?\s*$",
                           re.IGNORECASE)
 
@@ -19,9 +19,7 @@ def normalize(text: str) -> str:
     text = unicodedata.normalize("NFC", text)
     text = _CONTROL_RE.sub("", text)
     text = text.replace("\r\n", "\n").replace("\r", "\n")
-    # Separadores de línea Unicode que str.splitlines() trataría como salto de
-    # línea: NEL (\x85), LINE SEPARATOR ( ), PARAGRAPH SEPARATOR ( ).
-    # Si quedaran en el texto romperían la lectura del JSONL. Se unifican a \n.
+    # Separadores de línea Unicode
     text = text.replace("\x85", "\n").replace(" ", "\n").replace(" ", "\n")
     text = re.sub(r"(\w)-\n(\w)", r"\1\2", text)
     text = _MULTISPACE_RE.sub(" ", text)
@@ -31,9 +29,6 @@ def normalize(text: str) -> str:
 
 def remove_boilerplate(text: str) -> str:
     """Elimina líneas repetitivas sin valor y numeración de página.
-
-    Una línea corta que se repite muchas veces a lo largo del documento suele ser
-    un encabezado/pie recurrente.
     """
     lines = text.split("\n")
     freq = Counter(ln.strip() for ln in lines if ln.strip())

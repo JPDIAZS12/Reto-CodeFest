@@ -17,7 +17,7 @@ from config import (
 )
 
 
-#Metadat
+#Metadata
 @dataclass
 class Fragmento:
     doc_id: str        # documento de origen
@@ -26,7 +26,7 @@ class Fragmento:
     formato: str       
     fenomeno: int      
     posicion: int     
-    num_tokens: int    # nº de tokens del fragmento
+    num_tokens: int    # no de tokens del fragmento
     texto: str         # texto original del fragmento
     idioma: str = ""   # campo adicional opcional
 
@@ -64,25 +64,15 @@ def group_sentences(
     max_chunks: int | None = None,
 ) -> list[str]:
     """Agrupa oraciones consecutivas en textos de chunk.
-
-    `max_chunks` corta la generación al alcanzar ese número de chunks. Se corta
-    AQUÍ y no después para no tokenizar el documento entero: un CSV de 35 MB
-    tiene cientos de miles de oraciones y contarlas todas cuesta minutos de CPU
-    que se tirarían a la basura.
-
-    Devuelve: lista de textos de chunk, en orden.
     """
     chunks = []
 
-    buffer = []          # lista de (oracion, n_tokens) del chunk en construcción
-    tokens_buffer = 0    # suma de tokens de las oraciones del buffer
+    buffer = []          # lista del chunk en construcción
+    tokens_buffer = 0    
 
     for oracion in sentences:
-        # Cada oración se cuenta UNA sola vez (antes se re-tokenizaba todo el
-        # buffer en cada paso, costo cuadrático). Se cuenta dentro del bucle, y
-        # no en una lista previa, para poder abandonar temprano con max_chunks.
+        # Una sola cuenta por oración: re-tokenizar el buffer sería cuadrático.
         n_tokens = count_tokens(oracion, tokenizer)
-        # ¿Agregar esta oración haría que el chunk actual supere el límite?
         if buffer and tokens_buffer + n_tokens > max_tokens:
             # Cerrar el chunk actual con lo acumulado
             texto_chunk = " ".join(s for s, _ in buffer)
@@ -101,8 +91,7 @@ def group_sentences(
         buffer.append((oracion, n_tokens))
         tokens_buffer += n_tokens
 
-        # Caso borde: una sola oración que por sí sola excede el límite no se
-        # puede dividir sin cortarla; se emite como su propio chunk.
+        # Una oración más larga que el límite no se puede partir sin cortarla.
         if len(buffer) == 1 and n_tokens > max_tokens:
             chunks.append(oracion)
             buffer = []
@@ -111,7 +100,6 @@ def group_sentences(
         if max_chunks is not None and len(chunks) >= max_chunks:
             return chunks[:max_chunks]
 
-    # Emitir cualquier oración restante en el buffer como un chunk final
     if buffer:
         texto_chunk_final = " ".join(s for s, _ in buffer)
         chunks.append(texto_chunk_final)

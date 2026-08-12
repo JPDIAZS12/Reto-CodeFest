@@ -168,11 +168,16 @@ def informe_resultados(ruta: Path, metas: list[dict]) -> None:
         qid = obj["query_id"]
         frags = obj["fragments"]
 
-        # C) el dedup no debe dejar la salida corta ni repetir chunk_id
+        # C) el dedup no debe dejar la salida corta ni repetir CONTENIDO.
+        # Se compara el TEXTO, no el chunk_id: un chunk de más de 250 palabras
+        # se parte en varios fragmentos que heredan el mismo chunk_id del padre,
+        # así que repetir chunk_id es normal (con la mediana de 253 palabras por
+        # chunk, ocurre en las 50 consultas). Lo que sí sería un fallo del dedup
+        # es devolver dos veces el mismo texto.
         if len(frags) != TOP_N_FRAGMENTS:
             cortas.append((qid, len(frags)))
-        ids = [f["chunk_id"] for f in frags]
-        if len(set(ids)) != len(ids):
+        textos = [f["text"] for f in frags]
+        if len(set(textos)) != len(textos):
             con_repetidos.append(qid)
 
         # D) idiomas de lo recuperado
@@ -194,9 +199,9 @@ def informe_resultados(ruta: Path, metas: list[dict]) -> None:
         print(f"  [OK] las {len(objetos)} consultas traen {TOP_N_FRAGMENTS} fragmentos.")
 
     if con_repetidos:
-        print(f"  [X] {len(con_repetidos)} consultas con chunk_id repetidos: {con_repetidos[:6]}")
+        print(f"  [X] {len(con_repetidos)} consultas con TEXTO repetido: {con_repetidos[:6]}")
     else:
-        print("  [OK] ninguna consulta repite chunk_id (el dedup hizo su trabajo).")
+        print("  [OK] ninguna consulta repite texto (el dedup hizo su trabajo).")
 
     tabla("idioma de los fragmentos devueltos:", idiomas_frag, sum(idiomas_frag.values()))
     tabla("idioma de los documentos devueltos:", idiomas_doc, sum(idiomas_doc.values()))

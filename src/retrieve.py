@@ -1,8 +1,4 @@
-"""Módulo de recuperación (Secciones 8 y 9).
-
-Dada una consulta en lenguaje natural produce los DOS niveles de resultado:
-  - documents: top-3 doc_id  (se evalúa con F1@3)
-  - fragments: top-10 fragmentos ≤250 palabras (se evalúa con NDCG@10)
+"""Módulo de recuperación
 """
 from __future__ import annotations
 

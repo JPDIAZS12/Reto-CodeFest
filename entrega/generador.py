@@ -1,11 +1,10 @@
 """generador.py — produce resultados.jsonl a partir del índice y las consultas.
 
 Entregable 4 del reto: script reproducible que lee el archivo de consultas,
-usa la base vectorial y escribe entrega/resultados.jsonl con EXACTAMENTE una
-línea por consulta, siguiendo el esquema de la Tabla 2 (Sección 9.3).
+usa la base vectorial y escribe entrega/resultados.jsonl.
 
-Uso (desde la raíz del proyecto):  python entrega/generador.py
-Uso (desde el paquete entregado):  python generador.py
+Uso:  python entrega/generador.py
+Uso:  python generador.py
 
 Requiere haber construido antes la base:  python -m src.build_index
 """
@@ -16,15 +15,6 @@ import json
 import sys
 from pathlib import Path
 
-# Este script debe correr en DOS disposiciones distintas:
-#   (a) dentro del repo:     <raiz>/entrega/generador.py, con config.py y src/ en <raiz>
-#   (b) en el paquete final: <entrega>/generador.py, con config.py y src/ COPIADOS al lado
-#
-# El orden importa: dentro del repo, entrega/ contiene una COPIA de src/ que dejó
-# empaquetar_entrega.py, y si esa copia ganara eclipsaría al src/ real y estarías
-# ejecutando código viejo sin notarlo. Por eso, si el directorio padre parece la
-# raíz del repo (tiene config.py y src/), esa gana; si no, estamos en el paquete
-# entregado y manda el directorio local.
 AQUI = Path(__file__).resolve().parent
 ES_REPO = (AQUI.parent / "config.py").exists() and (AQUI.parent / "src").is_dir()
 if ES_REPO:
@@ -38,15 +28,9 @@ from config import ENCODER_SLUG, TOP_N_DOCUMENTS, TOP_N_FRAGMENTS
 from src.encode import Encoder
 from src.retrieve import load_base, retrieve
 
-# Rutas ANCLADAS a la ubicación de este archivo, NO importadas de config.
-# config.py deriva las suyas de su propio directorio (ROOT = su carpeta), así
-# que al copiarlo dentro de entrega/ apuntaría a entrega/entrega/base_vectorial.
-# Anclando aquí, el paquete funciona esté donde esté y se mueva a donde se mueva.
 INDICE_DIR = AQUI / "base_vectorial" / f"encoder_{ENCODER_SLUG}"
 RESULTADOS_DEFECTO = AQUI / "resultados.jsonl"
 
-# Las consultas viven en la raíz del repo, pero en el paquete van junto al
-# script. Se prefiere la copia local si existe.
 if (AQUI / "queries.jsonl").exists():
     QUERIES_DEFECTO = AQUI / "queries.jsonl"
 else:
@@ -70,37 +54,7 @@ def load_queries(path: Path = QUERIES_DEFECTO) -> list[tuple[str, str]]:
 
 def build_result_object(query_id: str, retrieved: dict) -> dict:
     """Convierte la salida de retrieve() en el objeto JSON del esquema Tabla 2.
-
-    `retrieved` tiene la forma:
-        {
-          "documents": ["DOC-A", "DOC-B", "DOC-C", ...],          # doc_id ordenados
-          "fragments": [{"chunk_id":..., "doc_id":..., "text":...}, ...]  # ordenados
-        }
-
-    Debes devolver un dict con ESTA estructura exacta:
-        {
-          "query_id": "q001",
-          "documents": [
-              {"rank": 1, "doc_id": "DOC-A"},
-              {"rank": 2, "doc_id": "DOC-B"},
-              {"rank": 3, "doc_id": "DOC-C"}
-          ],
-          "fragments": [
-              {"rank": 1, "chunk_id": "...", "doc_id": "...", "text": "..."},
-              ... (hasta TOP_N_FRAGMENTS)
-          ]
-        }
-
-    Pistas:
-      - El rank empieza en 1 (no en 0). Con un for + enumerate(..., start=1)
-        o llevando un contador, según tu estilo.
-      - documents: recorre retrieved["documents"][:TOP_N_DOCUMENTS] y crea un
-        dict {"rank": r, "doc_id": d} por cada uno.
-      - fragments: recorre retrieved["fragments"][:TOP_N_FRAGMENTS] y crea un
-        dict {"rank": r, "chunk_id":..., "doc_id":..., "text":...} por cada uno.
-      - Devuelve {"query_id": query_id, "documents": [...], "fragments": [...]}.
     """
-    # TODO(tú): construir el objeto de resultado con ranks (esquema Tabla 2).
     lista_docs = []
     for indice, doc_id in enumerate(retrieved["documents"][:TOP_N_DOCUMENTS], start=1):
         lista_docs.append({"rank": indice, "doc_id": doc_id})
@@ -124,14 +78,9 @@ def build_result_object(query_id: str, retrieved: dict) -> dict:
     return dict_resultado
 
 
-# --------------------------------------------------------------------------- #
-# Orquestador principal (provisto)
-# --------------------------------------------------------------------------- #
+#Orquestador principal
 def parse_args() -> argparse.Namespace:
     """Lee los argumentos de línea de comandos.
-
-    --queries : ruta al archivo de consultas de ADL (por defecto, el de config).
-    --out     : ruta del archivo de resultados a escribir (por defecto, config).
     """
     parser = argparse.ArgumentParser(
         description="Genera resultados.jsonl a partir del índice y las consultas."
@@ -155,8 +104,7 @@ def main() -> None:
     out_path = Path(args.out)
 
     print(f"Cargando base vectorial de {INDICE_DIR} y encoder...")
-    # Ruta EXPLÍCITA: el default de load_base() sale de config.BASE_VECTORIAL_DIR,
-    # que apunta mal cuando config.py está copiado dentro del paquete.
+    
     index, metas = load_base(INDICE_DIR)
     encoder = Encoder()
 

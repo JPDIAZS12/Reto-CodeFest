@@ -51,12 +51,7 @@ def _make_doc_id(path: Path, root: Path) -> str:
 
 
 def _ocr_pagina(page) -> str:
-    """OCR de UNA página de PDF que no trae capa de texto.
-
-    Se renderiza la página a imagen y se pasa por Tesseract. Reutiliza el mismo
-    filtro de calidad que el OCR de imágenes sueltas: si el resultado parece
-    ruido, se descarta.
-    """
+    """OCR de una página de PDF sin capa de texto."""
     try:
         import io
         import pytesseract
@@ -77,16 +72,7 @@ def _ocr_pagina(page) -> str:
 
 
 def _extract_pdf(path: Path) -> str:
-    """Texto de un PDF, con respaldo por OCR para páginas escaneadas.
-
-    Buena parte de los informes del corpus (las Alertas Tempranas de la
-    Defensoría, sobre todo) son escaneos sin capa de texto: `get_text` devuelve
-    cadena vacía y el documento entero se perdía en silencio. Cuando una página
-    no da texto se recurre al OCR.
-
-    El respaldo solo se activa página por página y solo cuando no hay texto, así
-    que los PDFs normales no pagan ningún costo.
-    """
+    """Texto de un PDF. Las páginas escaneadas (sin capa de texto) van por OCR."""
     import fitz
     parts = []
     with fitz.open(path) as doc:
@@ -114,12 +100,10 @@ def _extract_text(path: Path) -> str:
 
 
 def _extract_json(path: Path) -> tuple[str, dict]:
-    """Interpreta el objeto y arma el texto sin duplicar el cuerpo.
+    """Arma el texto del JSON tomando UNA sola fuente de cuerpo.
 
-    Los JSON del corpus traen a la vez `body_text` (texto completo) y
-    `body_paragraphs` (el MISMO texto como lista de párrafos). Concatenar
-    ambos duplicaría todo el cuerpo, así que se elige UNA sola fuente de
-    cuerpo (se prefiere la lista de párrafos, luego body_text/otros).
+    Muchos traen `body_text` y `body_paragraphs` con el mismo contenido;
+    concatenar ambos duplicaría el documento entero.
     """
     raw = json.loads(path.read_text(encoding="utf-8", errors="ignore"))
     records = raw if isinstance(raw, list) else [raw]
@@ -169,19 +153,12 @@ def _extract_json(path: Path) -> tuple[str, dict]:
 
 
 def _extract_csv(path: Path) -> str:
-    """Cada fila -> 'col: valor | col: valor'. Celdas vacías se omiten.
-
-    Los CSV del corpus real no siempre son limpios: hay separadores distintos
-    de la coma y filas con más campos que la cabecera. Antes eso tumbaba el
-    archivo entero ('Expected 1 fields in line 3, saw 3') y se perdía el
-    documento completo. Si el parseo estándar falla, se reintenta dejando que
-    pandas olfatee el separador y saltando las filas rotas: mejor recuperar el
-    90% de un CSV que perderlo del todo.
-    """
+    """Cada fila -> 'col: valor | col: valor'. Celdas vacías se omiten."""
     import pandas as pd
     try:
         df = pd.read_csv(path, dtype=str, keep_default_na=False)
     except Exception:
+        # Separador raro o filas malformadas: sniffing y saltar las rotas.
         df = pd.read_csv(
             path, dtype=str, keep_default_na=False,
             sep=None, engine="python", on_bad_lines="skip",
@@ -208,11 +185,7 @@ def _extract_xlsx(path: Path) -> str:
 
 
 def _ocr_es_util(texto: str) -> bool:
-    """Filtro de calidad del OCR: True si el texto parece contenido real y no
-    ruido.
-
-    Devuelve True solo si el texto supera esos umbrales.
-    """
+    """True si el texto del OCR parece contenido real y no ruido."""
     longitud_palabra = len(texto.split())
     
     if longitud_palabra < OCR_MIN_PALABRAS:
@@ -236,9 +209,6 @@ def _ocr_es_util(texto: str) -> bool:
 
 def _extract_image(path: Path) -> str:
     """OCR sobre imágenes con texto relevante, con filtro de calidad.
-
-    Solo devuelve el texto si _ocr_es_util lo considera contenido real; de lo
-    contrario devuelve "" (la imagen se descarta, no ensucia el índice).
     """
     try:
         import pytesseract
@@ -354,14 +324,7 @@ def extract_document(path: Path, root: Path) -> Optional[Documento]:
 
 
 def iter_documents(root: Path, id_root: Path | None = None):
-    """Recorre el corpus y produce un Documento por archivo soportado.
-
-    `root` es la carpeta que se recorre. `id_root` es la carpeta contra la que
-    se calcula el doc_id (por defecto, la misma). Se separan para poder indexar
-    por partes sin cambiar los identificadores: al correr una tanda por
-    fenómeno, `root` es F1_.../ pero `id_root` sigue siendo la raíz del corpus,
-    así que los doc_id salen idénticos a los de una corrida única y no pueden
-    colisionar entre tandas.
+    """Recorre `root` y produce un Documento por archivo soportado.
     """
     if id_root is None:
         id_root = root

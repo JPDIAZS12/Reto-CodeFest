@@ -1,18 +1,4 @@
-"""Flujo completo de indexación (Sección 6): construye la base vectorial.
-
-    corpus (data/) -> extract -> clean -> chunk -> encode -> FAISS + metadata
-
-Produce, en entrega/base_vectorial/encoder_<slug>/:
-    index.faiss     -> índice FAISS serializado con faiss.write_index()
-    metadata.jsonl  -> un objeto JSON por línea, UNA por fragmento
-
-INVARIANTE CRÍTICA (Sección 5.3 y entregable 1):
-    El identificador interno que FAISS asigna a cada vector es su posición de
-    inserción: 0, 1, 2, ... Por eso la línea i de metadata.jsonl debe describir
-    EXACTAMENTE el fragmento cuyo vector se insertó en la posición i. Si se
-    rompe ese orden, la metadata queda desalineada de los vectores y todo el
-    índice es inservible. Para garantizarlo mantenemos una ÚNICA lista de
-    fragmentos y la usamos tanto para codificar como para escribir la metadata.
+"""Flujo completo de indexación: construye la base vectorial.
 
 Uso:  python -m src.build_index
 """
@@ -54,8 +40,6 @@ def collect_fragments(root: Path, tokenizer, id_root: Path | None = None) -> lis
         idioma = detect_language(doc.texto)
         fragmentos.extend(chunk_document(doc, tokenizer, idioma=idioma))
         n_docs += 1
-        # La extracción de un corpus grande tarda mucho y no produce salida:
-        # sin esto no hay forma de distinguir "avanzando" de "colgado".
         if n_docs % 10 == 0:
             print(f"    {n_docs} docs -> {len(fragmentos)} fragmentos "
                   f"(último: {doc.fuente[:50]})", flush=True)
@@ -66,9 +50,8 @@ def collect_fragments(root: Path, tokenizer, id_root: Path | None = None) -> lis
 def build_faiss_index(embeddings: np.ndarray) -> faiss.Index:
     """Crea un índice FAISS y le inserta los `embeddings` (n, dim).
 
-    Usamos IndexFlatIP (producto interno). Como los vectores vienen
-    normalizados desde encode.py, el producto interno == similitud coseno, y el índice plano da resultados exactos.
-.
+    IndexFlatIP con vectores normalizados: el producto interno equivale al
+    coseno y la búsqueda es exacta.
     """
     index = faiss.IndexFlatIP(EMBED_DIM)
     index.add(embeddings)
@@ -79,7 +62,7 @@ def build_faiss_index(embeddings: np.ndarray) -> faiss.Index:
 def persist(index: faiss.Index, fragmentos: list[Fragmento], out_dir: Path) -> None:
     """Guarda index.faiss y metadata.jsonl en out_dir, en orden alineado.
     """
-    carpeta = out_dir.mkdir(parents=True, exist_ok=True)
+    out_dir.mkdir(parents=True, exist_ok=True)
     faiss.write_index(index, str(out_dir / "index.faiss"))
     with open(out_dir / "metadata.jsonl", "w", encoding= "utf-8") as file:
         for fragmento in fragmentos:
@@ -109,10 +92,8 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument(
         "--root", default=None,
-        help="Carpeta contra la que se calculan los doc_id. Por defecto, la misma "
-             "de --data. Al indexar POR TANDAS (una por fenómeno) hay que pasar "
-             "aquí la raíz del corpus, para que los doc_id salgan idénticos a los "
-             "de una corrida única y no colisionen entre tandas.",
+        help="Carpeta contra la que se calculan los doc_id. Por defecto, la de "
+             "--data. Al indexar por tandas hay que pasar la raíz del corpus.",
     )
     return parser.parse_args()
 

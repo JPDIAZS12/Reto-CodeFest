@@ -4,11 +4,9 @@ Documento de trabajo para redactar el `informe_tecnico.pdf`. Recoge **qué se
 decidió y por qué** en el sistema de recuperación, con los números que respaldan
 cada decisión.
 
-> **Aviso sobre los números.** Los marcados como **[SUBSET]** salen de un índice
-> de prueba de 75 documentos y 7.654 chunks, que es **95% PDFs** y por tanto no
-> representa el corpus real. Sirven para ilustrar el método, **no como
-> resultados finales**. Los marcados **[PENDIENTE]** se llenarán tras la corrida
-> del corpus completo. No los publiquen como definitivos.
+> **Los números de este documento son definitivos**, medidos sobre el índice
+> final del corpus completo: **79.141 fragmentos de 1.785 documentos**, el
+> 98,4% de los archivos del corpus.
 
 La guía del reto (§1.4) exige que el informe describa: **estrategia de chunking
 y su justificación**, **encoder(s) y criterios de elección**, **tipo de índice
@@ -77,6 +75,16 @@ parseo estricto tumbaba el archivo entero y se perdía el documento completo. Si
 el parseo estándar falla, se reintenta dejando que pandas olfatee el separador y
 saltando las filas rotas. Resultado: **26/26 CSV del corpus se extraen** (antes,
 25/26).
+
+**OCR de respaldo para PDFs escaneados.** Cuando una página de PDF no trae capa
+de texto, se renderiza a imagen y se pasa por Tesseract. Esto no es un adorno:
+**47 de los 62 PDFs de las Alertas Tempranas de la Defensoría del Pueblo son
+escaneos**, y sin este respaldo se descartaban enteros — 367 MB de informes
+sobre grupos armados y control territorial, la fuente más pertinente para las 18
+consultas del fenómeno 3, ausentes del índice sin que nada avisara. El respaldo
+actúa **página por página y solo cuando no hay texto**, así que los PDFs
+normales no pagan ningún costo. Recuperó 45 documentos y llevó esa carpeta de
+794 a **1.768 fragmentos**.
 
 ### 2.2 Limpieza
 
@@ -159,7 +167,9 @@ los 512 tokens del encoder, e5 la trunca al codificar y el vector no representa
 su parte final — aunque **el texto completo sí queda en la metadata**, de modo
 que el fragmento entregado al evaluador está íntegro. Ocurre en texto sin
 puntuación final: tablas, listas de referencias, PDFs con maquetación rota.
-Magnitud: **[PENDIENTE]** de cuantificar sobre el corpus completo.
+Magnitud sobre el corpus completo: 6.568 chunks (8,3%), pero concentrados casi
+por entero en formatos tabulares — de 47.293 fragmentos de PDF solo uno se
+truncó. Ver la limitación 11.2.2 para el desglose.
 
 ---
 
@@ -240,8 +250,8 @@ Motivo, con evidencia: con un pool de 50 chunks había consultas (q017 y q025)
 cuyos 50 candidatos provenían de **solo 2 documentos distintos**. El sistema no
 podía devolver 3 documentos aunque quisiera, y perdía recall garantizado en
 F1@3. La causa es la distribución del corpus: hay documentos que generan cientos
-de chunks (hasta 420 **[SUBSET]**) y copan el pool ellos solos. Con 200, esas
-consultas ven 19 y 28 documentos distintos.
+de chunks (hasta 2.000, el tope de §3.1) y copan el pool ellos solos. Con 200,
+esas consultas ven 19 y 28 documentos distintos.
 
 El costo es nulo: `IndexFlatIP` ya recorre todos los vectores, así que `k` solo
 cambia cuántos resultados se devuelven, no el trabajo de búsqueda.
@@ -264,27 +274,50 @@ independiente, es el **continuo** entre las otras dos — con *m*=1 es exactamen
 `max`, y con *m* ≥ número de chunks del documento es exactamente `sum`. El
 parámetro *m* regula cuánta acumulación se permite. Se verificó empíricamente.
 
-**Decisión actual: `max`.** Justificación:
+**Decisión: `topm` con m=3.** Se partió de `max` como baseline y se cambió con
+evidencia del corpus completo:
 
-1. Es la **única neutral a la longitud del documento**, y el corpus es
-   extremadamente heterogéneo en ese eje (964 JSON cortos frente a 760 PDFs de
-   cientos de páginas). Con solo 3 cupos, un sesgo sistemático es caro.
-2. `mean` quedó **descartada con datos**: es la peor en coherencia temática y
-   empeora al ampliar el pool.
-3. La diferencia entre `max` y las demás **[SUBSET]** es de 3 consultas sobre 50,
-   sobre un índice no representativo. Insuficiente para abandonar un baseline
-   estándar y defendible.
+| estrategia | documentos del tema correcto | consultas con ≥1 documento ajeno |
+|---|---|---|
+| `max` | 108/150 (72%) | 18/50 |
+| `mean` | 96/150 (64%) | 22/50 |
+| `sum` | 137/150 (91%) | 8/50 |
+| **`topm(m=3)`** | **138/150 (92%)** | **7/50** |
+| `topm(m=5)` | 140/150 (93%) | 6/50 |
 
-Decisión final: **[PENDIENTE]** de la corrida completa. Regla acordada: se
-mantiene `max` salvo que otra estrategia reduzca claramente los documentos del
-tema equivocado.
+Tres razones:
+
+1. **La mejora es grande y estable.** De 18 a 7 consultas con documento fuera de
+   tema, y el resultado se sostiene en m=2, 3, 5 y 10 — no depende de acertar el
+   parámetro.
+2. **Se entendió el mecanismo del fallo de `max`, no solo el síntoma.** Bajo max
+   basta un único chunk bueno para ganar, así que los documentos de un solo
+   fragmento compiten en igualdad con informes de cientos. El efecto era
+   extremo: **un mismo artículo aparecía en 14 de las 16 consultas del fenómeno
+   1**. Eso no es recuperación, es un *hub*: un documento genéricamente parecido
+   a cualquier pregunta del área, que no discrimina entre ellas. Con `topm` un
+   documento necesita tres fragmentos buenos, y ese artículo —que aporta un solo
+   fragmento— deja de dominar.
+3. **Entraron las fuentes especializadas.** Las posiciones ocupadas por fuentes
+   propias de IA en defensa (Defence AI Observatory, CSET Georgetown, SIPRI)
+   pasaron de 2 a 11 sobre 48.
+
+`mean` quedó descartada con datos: es la peor de las cuatro y empeora al ampliar
+el pool, porque cada documento recibe más fragmentos de similitud baja que le
+hunden el promedio.
+
+**Alcance del cambio:** afecta **solo al F1@3**. Los 10 fragmentos los elige
+`top_fragments` por similitud directa, sin pasar por la agregación, así que el
+NDCG@10 es idéntico con cualquiera de las cuatro estrategias.
 
 ### 6.3 Selección de fragmentos
 
 1. Se recorre el pool en orden de similitud descendente.
 2. Cada chunk se divide en sub-fragmentos de **≤250 palabras sin cortar
-   oraciones** (§9.2.1). Los chunks de 450 tokens rondan las 300 palabras, así
-   que esta división aplica a la mayoría **[SUBSET: 87%]**.
+   oraciones** (§9.2.1). La mediana de un chunk es de 253 palabras, así que la
+   división aplica al **51%** de ellos. Como consecuencia, varios fragmentos de
+   una misma respuesta pueden compartir `chunk_id`: son trozos distintos del
+   mismo chunk padre, no contenido repetido.
 3. Se descartan los casi-duplicados (ver §7) y se rellena con el siguiente
    candidato, hasta completar 10.
 
@@ -333,11 +366,13 @@ producción.
 inviable: la estimación para el corpus completo superaba los días. **Solución:
 indexación en Google Colab con GPU T4.**
 
-**Estrategia de tandas.** El corpus completo son ~133.000 chunks estimados y unas
-3-4 horas de T4, por encima de lo que garantiza una sesión gratuita. Se indexa en
-**20 tandas, una por subcarpeta**, con salida directa a Drive, y un script de
-fusión las une preservando la alineación. Si una sesión se corta, se retoman solo
-las tandas que faltan.
+**Estrategia de tandas.** El corpus completo son 79.141 chunks, por encima de lo
+que garantiza una sesión gratuita de GPU. Se indexó en **20 tandas, una por
+subcarpeta de fuente**, con salida directa a Drive, y un script de fusión las une
+preservando la alineación. La corrida principal tomó **135 minutos en T4** para
+19 tandas; la vigésima carpeta resultó vacía en origen. La decisión de trocear
+demostró su valor: dos sesiones se cortaron a mitad y solo hubo que repetir la
+tanda en curso.
 
 **Detalle técnico:** los `doc_id` se derivan de la ruta relativa a la carpeta
 indexada. Al indexar por tandas, cada una los habría calculado respecto a su
@@ -348,29 +383,29 @@ de modo que las tandas producen exactamente los mismos `doc_id` que una corrida
 
 ---
 
-## 10. Resultados medidos
+## 10. El índice construido
 
-**Todo lo de esta sección es [SUBSET]: 75 documentos, 7.654 chunks, 95% PDFs.**
-Ilustra el método de evaluación, no el rendimiento final.
+| | |
+|---|---|
+| fragmentos | **79.141** |
+| documentos | **1.785** de 1.839 archivos reales (**98,4%**) |
+| chunks por documento (media) | 44,3 |
+| dimensión de cada vector | 1.024 |
 
-Comparación de estrategias de agregación sobre las 50 consultas reales, con pool
-de 200. "Coherencia temática" = proporción de documentos devueltos que pertenecen
-al fenómeno de la consulta; es una **condición necesaria**, no una medida de
-relevancia.
+**Por fenómeno:** F3 49,5%, F2 25,8%, F1 24,6% de los documentos.
+**Por formato:** json 51,8%, pdf 42,3%, pbf 4,1%, csv 1,5%, xlsx/img/txt 0,4%.
+**Por idioma:** inglés 56,9%, español 33,8%, portugués 7,2%; el resto son
+documentos en francés, chino, árabe, ruso, alemán, catalán, coreano y japonés,
+casi todos de UNOOSA, que publica en los seis idiomas oficiales de la ONU.
 
-| estrategia | documentos del tema correcto | consultas con ≥1 documento ajeno |
-|---|---|---|
-| `max` | 126/150 (84%) | 15/50 |
-| `mean` | 115/150 (77%) | 21/50 |
-| `sum` | 130/150 (87%) | 12/50 |
-| `topm(m=2)` | 129/150 (86%) | 13/50 |
-| `topm(m=3)` | 130/150 (87%) | 12/50 |
-| `topm(m=10)` | 130/150 (87%) | 12/50 |
+**Validación de la salida:** las 50 consultas devuelven exactamente 10
+fragmentos, ninguno supera las 250 palabras, ninguna repite texto (el dedup
+funciona) y el esquema de §9.3 pasa el validador automático.
 
-Controles de validez del experimento: `topm(m=1)` reprodujo `max` en las 50
-consultas y `topm(m=10)` convergió a `sum`, como exige la equivalencia
-matemática. Cambiar de `max` a `mean` altera el conjunto de 3 documentos en el
-**80% de las consultas**: la agregación no es un ajuste marginal.
+**Controles de validez del experimento de agregación:** `topm(m=1)` reprodujo
+`max` en las 50 consultas y `topm(m=10)` convergió a `sum`, como exige la
+equivalencia matemática descrita en §6.2. Sin esos controles, la comparación no
+sería confiable.
 
 ---
 
@@ -378,25 +413,98 @@ matemática. Cambiar de `max` a `mean` altera el conjunto de 3 documentos en el
 
 Conviene declararlas en el informe; son decisiones informadas, no descuidos.
 
+### 11.1 Sesgo del encoder hacia el idioma de la consulta (la principal)
+
+Las 50 consultas están en español. Medimos, para las 16 consultas del fenómeno 1,
+la similitud máxima que alcanza cada fuente del corpus:
+
+| fuente | similitud media | chunks | idioma |
+|---|---:|---:|---|
+| CEEEP | 0,861 | 83 | español |
+| ILIA | 0,844 | 2.208 | español |
+| DAIO | 0,834 | 1.957 | inglés |
+| CSET Georgetown | 0,831 | 3.909 | inglés |
+| CENIA | 0,823 | 276 | español |
+| AI Index (Stanford) | 0,815 | 20.405 | inglés |
+| Atlantic Council | 0,811 | 936 | inglés |
+
+**La tabla está prácticamente ordenada por idioma**: las fuentes en español
+promedian 0,843 y las inglesas 0,823, una brecha de ~0,02 en coseno constante en
+las 16 consultas sin excepción.
+
+El dato que aísla la causa: **AI Index tiene diez veces más fragmentos que ILIA y
+alcanza menos similitud**. Más fragmentos son más oportunidades de puntuar alto;
+si con diez veces más intentos queda por debajo, no es cuestión de tamaño ni de
+cobertura temática.
+
+**Por qué ocurre.** Los encoders multilingües proyectan todos los idiomas a un
+espacio común, pero esa alineación es imperfecta: parte de la capacidad del
+vector codifica *en qué idioma está escrito* el texto, no solo qué dice. Un
+pasaje en español queda más cerca de una consulta en español que su equivalente
+en inglés. Probablemente se suma un efecto de registro: las consultas son prosa
+institucional en español, más parecida en estilo a CEEEP o ILIA que a un informe
+de datos en inglés técnico.
+
+**Consecuencia:** el fenómeno 1, cuyo corpus es 95% inglés, recibe documentos
+mayoritariamente en español. Afecta a 16 de las 50 consultas; F2 y F3 no se ven
+comprometidos.
+
+**Cómo se corregiría**, en orden de eficacia: (a) un segundo encoder con mejor
+alineación cross-lingual —los entrenados sobre pares de traducción alinean mucho
+más fuerte que e5— fusionado por RRF, que es exactamente lo que contemplan §4.4 y
+§8.4; (b) codificar la consulta también en inglés, inviable aquí porque traducir
+exige un modelo generativo, prohibido por §8.3; (c) normalizar las puntuaciones
+por idioma antes de ordenar, barato pero imposible de calibrar sin datos de
+validación.
+
+No se aplicó ninguna: las tres exigen o recursos de cómputo ya agotados o una
+validación que sin ground truth no existe, y aplicar una corrección no validada
+al entregable final habría sido una apuesta.
+
+### 11.2 Otras limitaciones
+
 1. **No hay juicios de relevancia.** El ground truth no es público durante el
    reto, así que ninguna decisión pudo optimizarse contra la métrica real. Se usó
-   coherencia temática como señal indirecta y, ante empates, se prefirió el
+   la coherencia temática como señal indirecta y, ante empates, se prefirió el
    baseline defendible.
-2. **Chunks que exceden 512 tokens** se truncan al codificar (§3). El texto
-   entregado está completo; el vector no lo representa entero.
-3. **El corpus no es estrictamente trilingüe.** Además de ES/EN/PT aparecen
-   documentos en francés, ruso, árabe y chino — UNOOSA publica en los seis
-   idiomas oficiales de la ONU. e5 los indexa sin problema por ser multilingüe.
-   **[PENDIENTE]** confirmar la distribución sobre el corpus completo.
-4. **La asignación de fenómeno a cada consulta es una inferencia nuestra**,
+2. **6.568 chunks (8,3%) exceden los 512 tokens** y e5 los trunca al codificar.
+   El impacto real es pequeño y está acotado: **de 47.293 fragmentos de PDF,
+   exactamente uno se truncó**. El problema vive en los formatos tabulares (22,7%
+   de los chunks de CSV, 24,6% de los de PBF), donde cada fila es una "oración"
+   sin puntuación final que el chunker no puede partir. En total queda sin
+   representar el **2,8% de los tokens del corpus**, y de los chunks afectados el
+   encoder alcanza a ver el 81% de media. La prosa —lo que responde las
+   consultas— está intacta.
+3. **La asignación de fenómeno a cada consulta es una inferencia nuestra**,
    deducida del orden de los bloques en el PDF de preguntas y verificada leyendo
-   las 50. No es un dato provisto por el reto.
+   las 50. No es un dato provisto por el reto, y por eso se usó solo como
+   diagnóstico y nunca como filtro. Tiene además un falso negativo conocido: el
+   CEEEP está archivado bajo el fenómeno 3 pero publica sobre IA y defensa, así
+   que la métrica lo penaliza injustamente.
+4. **Quedaron fuera del índice 54 archivos** (1,6%): 2 JSON vacíos en origen, 5
+   PDFs escaneados de CSIS y CSET cuyo OCR no se ejecutó por costo frente a
+   beneficio, y algunos archivos que fallaron al extraerse.
 
 ---
 
-## 12. Pendiente de cerrar
+## 12. Estado
 
-- Corrida de indexación del corpus completo.
-- Decisión final de `DOC_AGGREGATION` (`max` vs `topm(m=3)`) con el índice real.
-- Cuantificar los chunks truncados y la distribución de idiomas.
-- Regenerar `resultados.jsonl` y pasar el validador de entrega.
+**Cerrado:** índice del corpus completo construido y fusionado, agregación
+decidida con evidencia, `resultados.jsonl` regenerado, y el paquete de entrega
+validado — presentes los entregables de §1.4, alineación índice↔metadata de §5.3
+verificada, y esquema de §9.3 conforme.
+
+**Pendiente, a cargo del equipo:** `informe_tecnico.pdf` y el grafo de
+conocimiento (componente bonus de §7).
+
+---
+
+## Anexo: cómo reproducir cada número de este documento
+
+```
+python scripts/informe_indice.py --indice entrega/base_vectorial/encoder_e5-large \
+    --resultados entrega/resultados.jsonl      # §10 y limitación 11.2.2
+python scripts/comparar_agregacion.py --indice entrega/base_vectorial/encoder_e5-large
+                                               # tabla de §6.2
+python scripts/empaquetar_entrega.py           # validación de §8
+```
