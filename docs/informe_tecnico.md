@@ -2,7 +2,7 @@
 
 **CODEFEST AD ASTRA 2026 · Etapa 1**
 **Equipo:** [COMPLETAR: nombre del equipo e integrantes]
-**Fecha:** [COMPLETAR]
+**Fecha:** 13 de agosto de 2026
 
 > Fuente de este documento: `docs/informe_tecnico.md`. Convertir a
 > `entrega/informe_tecnico.pdf` antes de empaquetar (máx. 8 páginas, §1.4).
@@ -247,8 +247,8 @@ presencia de los entregables de §1.4, alineación índice↔metadata de §5.3,
 esquema completo de §9.3 (50 líneas en orden `q001`–`q050`, exactamente 3
 documentos y 10 fragmentos con ranks desde 1, límite de 250 palabras) y
 presencia de los tres flags del contrato. Sale con código ≠ 0 si algo falla.
-Cada módulo tiene además pruebas automáticas ([COMPLETAR: nº total de casos]
-casos en `tests/`).
+Cada módulo tiene además pruebas automáticas (119 casos en 8 archivos de
+`tests/`).
 
 ---
 
