@@ -18,6 +18,7 @@ Uso:  python -m src.build_index
 """
 from __future__ import annotations
 
+import argparse
 import json
 from pathlib import Path
 
@@ -37,20 +38,28 @@ from src.chunk import chunk_document, Fragmento
 from src.encode import Encoder
 
 
-# --------------------------------------------------------------------------- #
-# 1. Recolección de fragmentos (orquestación, ya provista)
-# --------------------------------------------------------------------------- #
-def collect_fragments(root: Path, tokenizer) -> list[Fragmento]:
+
+def collect_fragments(root: Path, tokenizer, id_root: Path | None = None) -> list[Fragmento]:
     """Recorre el corpus y devuelve TODOS los fragmentos en un orden estable.
 
+    `id_root` (opcional) es la carpeta contra la que se calculan los doc_id;
+    ver iter_documents. Sirve para indexar por tandas sin cambiar los ids.
     """
     fragmentos: list[Fragmento] = []
-    for doc in iter_documents(root):
+    n_docs = 0
+    for doc in iter_documents(root, id_root):
         doc.texto = clean_document(doc.texto)
         if not doc.texto.strip():
             continue
         idioma = detect_language(doc.texto)
         fragmentos.extend(chunk_document(doc, tokenizer, idioma=idioma))
+        n_docs += 1
+        # La extracción de un corpus grande tarda mucho y no produce salida:
+        # sin esto no hay forma de distinguir "avanzando" de "colgado".
+        if n_docs % 10 == 0:
+            print(f"    {n_docs} docs -> {len(fragmentos)} fragmentos "
+                  f"(último: {doc.fuente[:50]})", flush=True)
+    print(f"    {n_docs} documentos procesados en total.", flush=True)
     return fragmentos
 
 
@@ -81,26 +90,61 @@ def persist(index: faiss.Index, fragmentos: list[Fragmento], out_dir: Path) -> N
 
 
 
+def parse_args() -> argparse.Namespace:
+    """--data: carpeta del corpus a indexar. --out: carpeta de salida."""
+    parser = argparse.ArgumentParser(
+        description="Construye la base vectorial (index.faiss + metadata.jsonl)."
+    )
+    parser.add_argument(
+        "--data", default=str(DATA_DIR),
+        help="Carpeta del corpus a indexar. Por defecto: %(default)s",
+    )
+    parser.add_argument(
+        "--out", default=str(BASE_VECTORIAL_DIR / f"encoder_{ENCODER_SLUG}"),
+        help="Carpeta de salida encoder_<slug>. Por defecto: %(default)s",
+    )
+    parser.add_argument(
+        "--batch", type=int, default=ENCODE_BATCH_SIZE,
+        help="Tamaño de lote al codificar. Bájalo si hay poca RAM. Por defecto: %(default)s",
+    )
+    parser.add_argument(
+        "--root", default=None,
+        help="Carpeta contra la que se calculan los doc_id. Por defecto, la misma "
+             "de --data. Al indexar POR TANDAS (una por fenómeno) hay que pasar "
+             "aquí la raíz del corpus, para que los doc_id salgan idénticos a los "
+             "de una corrida única y no colisionen entre tandas.",
+    )
+    return parser.parse_args()
+
+
 def main() -> None:
+    args = parse_args()
+    data_dir = Path(args.data)
+    out_dir = Path(args.out)
+
     print("Cargando encoder.")
     enc = Encoder()
-    tokenizer = enc.model.tokenizer 
+    tokenizer = enc.model.tokenizer
 
-    print(f"Recorriendo corpus en {DATA_DIR} ...")
-    fragmentos = collect_fragments(DATA_DIR, tokenizer)
+    if args.root is None:
+        id_root = data_dir
+    else:
+        id_root = Path(args.root)
+
+    print(f"Recorriendo corpus en {data_dir} (doc_id relativos a {id_root}) ...")
+    fragmentos = collect_fragments(data_dir, tokenizer, id_root)
     if not fragmentos:
-        print("[ERROR] No se generaron fragmentos. ¿Hay documentos en data/?")
+        print(f"[ERROR] No se generaron fragmentos. ¿Hay documentos en {data_dir}?")
         return
     print(f"  fragmentos totales: {len(fragmentos)}")
 
-    print("Codificando fragmentos (passage:) ...")
+    print(f"Codificando fragmentos (passage:) con batch={args.batch} ...")
     textos = [f.texto for f in fragmentos]
-    embeddings = enc.encode_passages(textos, batch_size=ENCODE_BATCH_SIZE)
+    embeddings = enc.encode_passages(textos, batch_size=args.batch)
 
     print("Construyendo índice FAISS ...")
     index = build_faiss_index(embeddings)
 
-    out_dir = BASE_VECTORIAL_DIR / f"encoder_{ENCODER_SLUG}"
     print(f"Guardando en {out_dir} ...")
     persist(index, fragmentos, out_dir)
 
@@ -109,3 +153,4 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
+    

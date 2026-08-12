@@ -13,6 +13,7 @@ from config import (
     CHUNK_MAX_TOKENS,
     CHUNK_OVERLAP_SENTENCES,
     CHUNK_MIN_TOKENS,
+    MAX_CHUNKS_POR_DOCUMENTO,
 )
 
 
@@ -60,35 +61,62 @@ def group_sentences(
     tokenizer,
     max_tokens: int,
     overlap: int,
+    max_chunks: int | None = None,
 ) -> list[str]:
     """Agrupa oraciones consecutivas en textos de chunk.
+
+    `max_chunks` corta la generación al alcanzar ese número de chunks. Se corta
+    AQUÍ y no después para no tokenizar el documento entero: un CSV de 35 MB
+    tiene cientos de miles de oraciones y contarlas todas cuesta minutos de CPU
+    que se tirarían a la basura.
 
     Devuelve: lista de textos de chunk, en orden.
     """
     chunks = []
-    buffer = []
+
+    buffer = []          # lista de (oracion, n_tokens) del chunk en construcción
+    tokens_buffer = 0    # suma de tokens de las oraciones del buffer
+
     for oracion in sentences:
-        buffer.append(oracion)
-        texto_buffer_actual = " ".join(buffer)
-        numero_tokens_actual = count_tokens(texto_buffer_actual, tokenizer)
-        if numero_tokens_actual > max_tokens:
-            buffer.pop()  
-            if buffer:
-                texto_chunk = " ".join(buffer)
-                chunks.append(texto_chunk)
-                if overlap > 0:
-                    buffer = buffer[-overlap:]  
-                else:
-                    buffer = []
-                buffer.append(oracion)  
+        # Cada oración se cuenta UNA sola vez (antes se re-tokenizaba todo el
+        # buffer en cada paso, costo cuadrático). Se cuenta dentro del bucle, y
+        # no en una lista previa, para poder abandonar temprano con max_chunks.
+        n_tokens = count_tokens(oracion, tokenizer)
+        # ¿Agregar esta oración haría que el chunk actual supere el límite?
+        if buffer and tokens_buffer + n_tokens > max_tokens:
+            # Cerrar el chunk actual con lo acumulado
+            texto_chunk = " ".join(s for s, _ in buffer)
+            chunks.append(texto_chunk)
+            # Solapamiento: conservar las últimas `overlap` oraciones
+            if overlap > 0:
+                buffer = buffer[-overlap:]
             else:
-                # Caso borde: la oración sola excede el límite, emitirla como chunk
-                chunks.append(oracion)
                 buffer = []
+            # Recalcular la suma de tokens del buffer que quedó (el de solape)
+            tokens_buffer = 0
+            for _, t in buffer:
+                tokens_buffer += t
+
+        # Agregar la oración actual al buffer
+        buffer.append((oracion, n_tokens))
+        tokens_buffer += n_tokens
+
+        # Caso borde: una sola oración que por sí sola excede el límite no se
+        # puede dividir sin cortarla; se emite como su propio chunk.
+        if len(buffer) == 1 and n_tokens > max_tokens:
+            chunks.append(oracion)
+            buffer = []
+            tokens_buffer = 0
+
+        if max_chunks is not None and len(chunks) >= max_chunks:
+            return chunks[:max_chunks]
+
     # Emitir cualquier oración restante en el buffer como un chunk final
     if buffer:
-        texto_chunk_final = " ".join(buffer)
+        texto_chunk_final = " ".join(s for s, _ in buffer)
         chunks.append(texto_chunk_final)
+    if max_chunks is not None:
+        return chunks[:max_chunks]
     return chunks
 
 
@@ -103,6 +131,7 @@ def chunk_document(doc, tokenizer, idioma: str = "") -> list[Fragmento]:
         sentences, tokenizer,
         max_tokens=CHUNK_MAX_TOKENS,
         overlap=CHUNK_OVERLAP_SENTENCES,
+        max_chunks=MAX_CHUNKS_POR_DOCUMENTO,
     )
 
     fragmentos: list[Fragmento] = []

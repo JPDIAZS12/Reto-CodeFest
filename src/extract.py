@@ -7,7 +7,16 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Optional
 
-from config import FORMAT_MAP
+from config import (
+    FORMAT_MAP,
+    OCR_IDIOMAS,
+    OCR_MIN_PALABRAS,
+    OCR_MIN_RATIO_ALFA,
+    PDF_OCR_FALLBACK,
+    PDF_OCR_DPI,
+    PBF_PROP_MIN_LEN,
+    PBF_CLAVES_TECNICAS,
+)
 
 
 @dataclass
@@ -21,8 +30,13 @@ class Documento:
 
 
 def _fenomeno_from_path(path: Path) -> int:
+    """Deduce el fenómeno (1/2/3) del nombre de una carpeta ancestro.
+
+    Reconoce tanto nuestro esquema de prueba (fenomeno_1) como el del corpus
+    real de ADL (F1_IA_..., F2_Seguridad_..., F3_Dinamicas_...).
+    """
     for part in path.parts:
-        m = re.fullmatch(r"fenomeno[_\-]?(\d)", part.lower())
+        m = re.match(r"f(?:enomeno)?[_\-]?([123])", part.lower())
         if m:
             return int(m.group(1))
     return 0
@@ -36,12 +50,52 @@ def _make_doc_id(path: Path, root: Path) -> str:
 
 
 
+def _ocr_pagina(page) -> str:
+    """OCR de UNA página de PDF que no trae capa de texto.
+
+    Se renderiza la página a imagen y se pasa por Tesseract. Reutiliza el mismo
+    filtro de calidad que el OCR de imágenes sueltas: si el resultado parece
+    ruido, se descarta.
+    """
+    try:
+        import io
+        import pytesseract
+        from PIL import Image
+    except ImportError:
+        return ""
+    try:
+        pix = page.get_pixmap(dpi=PDF_OCR_DPI)
+        texto = pytesseract.image_to_string(
+            Image.open(io.BytesIO(pix.tobytes("png"))), lang=OCR_IDIOMAS
+        )
+    except Exception:
+        return ""
+    texto = texto.strip()
+    if not texto or not _ocr_es_util(texto):
+        return ""
+    return texto
+
+
 def _extract_pdf(path: Path) -> str:
-    import fitz  
+    """Texto de un PDF, con respaldo por OCR para páginas escaneadas.
+
+    Buena parte de los informes del corpus (las Alertas Tempranas de la
+    Defensoría, sobre todo) son escaneos sin capa de texto: `get_text` devuelve
+    cadena vacía y el documento entero se perdía en silencio. Cuando una página
+    no da texto se recurre al OCR.
+
+    El respaldo solo se activa página por página y solo cuando no hay texto, así
+    que los PDFs normales no pagan ningún costo.
+    """
+    import fitz
     parts = []
     with fitz.open(path) as doc:
         for page in doc:
-            parts.append(page.get_text("text"))
+            texto = page.get_text("text")
+            if texto.strip():
+                parts.append(texto)
+            elif PDF_OCR_FALLBACK:
+                parts.append(_ocr_pagina(page))
     return "\n".join(parts)
 
 
@@ -60,14 +114,19 @@ def _extract_text(path: Path) -> str:
 
 
 def _extract_json(path: Path) -> tuple[str, dict]:
-    """Interpreta el objeto y concatena campos de texto conocidos.
+    """Interpreta el objeto y arma el texto sin duplicar el cuerpo.
 
+    Los JSON del corpus traen a la vez `body_text` (texto completo) y
+    `body_paragraphs` (el MISMO texto como lista de párrafos). Concatenar
+    ambos duplicaría todo el cuerpo, así que se elige UNA sola fuente de
+    cuerpo (se prefiere la lista de párrafos, luego body_text/otros).
     """
     raw = json.loads(path.read_text(encoding="utf-8", errors="ignore"))
     records = raw if isinstance(raw, list) else [raw]
 
-    body_keys = ("title", "headline", "body_text", "body", "body_paragraphs",
-                 "text", "content", "abstract", "summary")
+    titulo_keys = ("title", "headline")
+    cuerpo_keys = ("body_paragraphs", "body_text", "body", "text", "content", "article")
+    respaldo_keys = ("excerpt", "abstract", "summary")  # solo si no hay cuerpo
     meta_keys = ("url", "date", "published", "authors", "author", "tags", "source")
 
     body_parts, extra = [], {}
@@ -75,23 +134,58 @@ def _extract_json(path: Path) -> tuple[str, dict]:
         if not isinstance(rec, dict):
             body_parts.append(str(rec))
             continue
-        for k in body_keys:
-            if k in rec and rec[k]:
+
+        # Título
+        for k in titulo_keys:
+            if rec.get(k):
+                body_parts.append(str(rec[k]))
+                break
+
+        # Cuerpo: UNA sola fuente, la primera disponible
+        cuerpo = None
+        for k in cuerpo_keys:
+            if rec.get(k):
                 v = rec[k]
                 if isinstance(v, list):
-                    body_parts.append("\n".join(str(x) for x in v))
+                    cuerpo = "\n".join(str(x) for x in v)
                 else:
-                    body_parts.append(str(v))
+                    cuerpo = str(v)
+                break
+        if cuerpo:
+            body_parts.append(cuerpo)
+        else:
+            # Sin cuerpo: usar un resumen/excerpt como respaldo
+            for k in respaldo_keys:
+                if rec.get(k):
+                    body_parts.append(str(rec[k]))
+                    break
+
+        # Metadata descriptiva (no entra al cuerpo)
         for k in meta_keys:
-            if k in rec and rec[k] and k not in extra:
+            if rec.get(k) and k not in extra:
                 extra[k] = rec[k]
+
     return "\n\n".join(body_parts), extra
 
 
 def _extract_csv(path: Path) -> str:
-    """Cada fila -> 'col: valor | col: valor'. Celdas vacías se omiten."""
+    """Cada fila -> 'col: valor | col: valor'. Celdas vacías se omiten.
+
+    Los CSV del corpus real no siempre son limpios: hay separadores distintos
+    de la coma y filas con más campos que la cabecera. Antes eso tumbaba el
+    archivo entero ('Expected 1 fields in line 3, saw 3') y se perdía el
+    documento completo. Si el parseo estándar falla, se reintenta dejando que
+    pandas olfatee el separador y saltando las filas rotas: mejor recuperar el
+    90% de un CSV que perderlo del todo.
+    """
     import pandas as pd
-    df = pd.read_csv(path, dtype=str, keep_default_na=False)
+    try:
+        df = pd.read_csv(path, dtype=str, keep_default_na=False)
+    except Exception:
+        df = pd.read_csv(
+            path, dtype=str, keep_default_na=False,
+            sep=None, engine="python", on_bad_lines="skip",
+        )
     lines = []
     for _, row in df.iterrows():
         pairs = [f"{c}: {v}" for c, v in row.items() if str(v).strip()]
@@ -113,25 +207,83 @@ def _extract_xlsx(path: Path) -> str:
     return "\n".join(out)
 
 
+def _ocr_es_util(texto: str) -> bool:
+    """Filtro de calidad del OCR: True si el texto parece contenido real y no
+    ruido.
+
+    Devuelve True solo si el texto supera esos umbrales.
+    """
+    longitud_palabra = len(texto.split())
+    
+    if longitud_palabra < OCR_MIN_PALABRAS:
+        return False
+    
+    alfa = 0
+    
+    for c in texto:
+        if c.isalpha() or c.isspace():
+            alfa += 1
+    
+    ratio = alfa / max(len(texto), 1)
+    
+    if ratio < OCR_MIN_RATIO_ALFA:
+        return False
+    
+    return True
+    
+    
+
+
 def _extract_image(path: Path) -> str:
-    """OCR sobre imágenes con texto relevante"""
+    """OCR sobre imágenes con texto relevante, con filtro de calidad.
+
+    Solo devuelve el texto si _ocr_es_util lo considera contenido real; de lo
+    contrario devuelve "" (la imagen se descarta, no ensucia el índice).
+    """
     try:
         import pytesseract
         from PIL import Image
     except ImportError:
         return ""
     try:
-        return pytesseract.image_to_string(Image.open(path), lang="spa+eng+por")
+        texto = pytesseract.image_to_string(Image.open(path), lang=OCR_IDIOMAS)
     except Exception:
         return ""
+    texto = texto.strip()
+    if not texto:
+        return ""
+    if not _ocr_es_util(texto):
+        return ""
+    return texto
+
+
+def _prop_es_util(clave: str, valor) -> bool:
+    """Filtro de atributos de un feature de mapa: True si el par clave:valor
+    aporta significado textual, False si es ruido.
+    """
+
+    if not valor:
+        return False
+
+    # 2) clave técnica (identificadores y códigos, no nombres)
+    if clave.lower() in PBF_CLAVES_TECNICAS:
+        return False
+
+    if isinstance(valor, (int, float)):
+        return False
+    valor_str = str(valor).strip()
+    solo_digitos = valor_str.replace(".", "").replace(",", "")
+    if solo_digitos.isdigit():
+        return False
+
+    if len(valor_str) < PBF_PROP_MIN_LEN:
+        return False
+
+    return True
 
 
 def _extract_pbf(path: Path) -> str:
-    """Mapas en formato PBF (vector tiles).
-
-    Se recorren capas y elementos leyendo atributos como pares 'atributo: valor'.
-    Se deduplica para no repetir el mismo elemento en varios niveles de zoom.
-    Requiere 'mapbox_vector_tile'. Si no está disponible, se omite el documento.
+    """Mapas en formato PBF (vector tiles), con dedup agresivo y filtro de props.
     """
     try:
         import mapbox_vector_tile as mvt
@@ -145,11 +297,15 @@ def _extract_pbf(path: Path) -> str:
     for layer in tile.values():
         for feat in layer.get("features", []):
             props = feat.get("properties", {})
-            key = tuple(sorted(props.items()))
-            if not props or key in seen:
+            # conservar solo atributos con significado textual
+            utiles = {k: v for k, v in props.items() if _prop_es_util(k, v)}
+            if not utiles:
+                continue
+            key = tuple(sorted(utiles.items()))
+            if key in seen: 
                 continue
             seen.add(key)
-            lines.append(" | ".join(f"{k}: {v}" for k, v in props.items()))
+            lines.append(" | ".join(f"{k}: {v}" for k, v in utiles.items()))
     return "\n".join(lines)
 
 
@@ -197,10 +353,20 @@ def extract_document(path: Path, root: Path) -> Optional[Documento]:
     )
 
 
-def iter_documents(root: Path):
-    """Recorre el corpus y produce un Documento por archivo soportado."""
+def iter_documents(root: Path, id_root: Path | None = None):
+    """Recorre el corpus y produce un Documento por archivo soportado.
+
+    `root` es la carpeta que se recorre. `id_root` es la carpeta contra la que
+    se calcula el doc_id (por defecto, la misma). Se separan para poder indexar
+    por partes sin cambiar los identificadores: al correr una tanda por
+    fenómeno, `root` es F1_.../ pero `id_root` sigue siendo la raíz del corpus,
+    así que los doc_id salen idénticos a los de una corrida única y no pueden
+    colisionar entre tandas.
+    """
+    if id_root is None:
+        id_root = root
     for path in sorted(root.rglob("*")):
         if path.is_file():
-            doc = extract_document(path, root)
+            doc = extract_document(path, id_root)
             if doc is not None:
                 yield doc
