@@ -1,7 +1,8 @@
 # Informe técnico — Base de conocimiento vectorial
 
 **CODEFEST AD ASTRA 2026 · Etapa 1**
-**Equipo:** [COMPLETAR: nombre del equipo e integrantes]
+**Equipo:** Git Init — Juan Pablo Diaz, Samuel Antonio Castro, Nicolas Arce
+y Wolfgang Felipe Guzman
 **Fecha:** 13 de agosto de 2026
 
 > Fuente de este documento: `docs/informe_tecnico.md`. Convertir a

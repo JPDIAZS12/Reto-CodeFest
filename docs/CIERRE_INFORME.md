@@ -15,7 +15,6 @@ calcular nada a mano.
 
 | # | Hueco (sección del informe) | Comando | Dónde mirar en la salida |
 |---|---|---|---|
-| 1 | Nombre del equipo e integrantes (encabezado) | — | lo define el equipo |
 | 2 | % de chunks >512 tokens (§2, caso borde) | `python scripts/informe_indice.py --indice entrega/base_vectorial/encoder_e5-large` | sección **B. CHUNKING**, línea de chunks que superan los tokens del encoder (dividir por "chunks totales" de la sección A) |
 | 3 | Confirmar `max` pooling (§5.2) | `python scripts/comparar_agregacion.py --indice entrega/base_vectorial/encoder_e5-large` | **RESUMEN**: % de consultas cuyo top-3 difiere por estrategia. Regla acordada: se mantiene `max` salvo que otra estrategia reduzca claramente los documentos del tema equivocado (revisar el DETALLE a ojo) |
 | 4 | Tabla comparativa de agregación (§5.2) | el mismo comando del punto 3 | copiar la tabla del RESUMEN (estrategia / difieren / %) |
