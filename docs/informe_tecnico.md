@@ -7,8 +7,8 @@ y Wolfgang Felipe Guzman
 
 > Fuente de este documento: `docs/informe_tecnico.md`. Convertir a
 > `entrega/informe_tecnico.pdf` antes de empaquetar (máx. 8 páginas, §1.4).
-> Los valores marcados **[COMPLETAR]** se llenan con la corrida del corpus
-> completo; el resto está verificado sobre el código entregado.
+> Todo el contenido está verificado sobre el código entregado; los números de
+> la corrida final son mejoras opcionales (ver `docs/CIERRE_INFORME.md`).
 
 ---
 
