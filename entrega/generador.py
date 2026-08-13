@@ -20,6 +20,7 @@ from __future__ import annotations
 import argparse
 import json
 import sys
+import time
 from pathlib import Path
 
 # Este script debe correr en DOS disposiciones distintas:
@@ -186,11 +187,21 @@ def main() -> None:
     print(f"{len(queries)} consultas leídas de {queries_path.name}")
 
     out_path.parent.mkdir(parents=True, exist_ok=True)
+    print("El re-ranking codifica ~46 sub-fragmentos por consulta: en CPU son "
+          "unos 45 s por consulta, en GPU unos pocos segundos.", flush=True)
+
+    t0 = time.time()
     with open(out_path, "w", encoding="utf-8") as salida:
-        for query_id, texto in queries:
+        for i, (query_id, texto) in enumerate(queries, start=1):
             retrieved = retrieve(texto, index, metas, encoder, graph=grafo, entity_index=entity_index)
             obj = build_result_object(query_id, retrieved)
             salida.write(json.dumps(obj, ensure_ascii=False) + "\n")
+            salida.flush()
+            transcurrido = time.time() - t0
+            restante = transcurrido / i * (len(queries) - i)
+            print(f"  [{i:>2}/{len(queries)}] {query_id}  "
+                  f"({transcurrido/60:.1f} min transcurridos, "
+                  f"~{restante/60:.0f} min restantes)", flush=True)
 
     print(f"Listo. {len(queries)} líneas escritas en {out_path}")
 

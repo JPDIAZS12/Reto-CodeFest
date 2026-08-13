@@ -294,7 +294,9 @@ def top_fragments_rerank(
     """
     finos = _sub_candidatos(scored[:pool_chunks], max_words)
     if finos:
-        embeddings = encoder.encode_passages([c["text"] for c in finos])
+        # Un solo lote: son ~46 sub-fragmentos por consulta y el batch por
+        # defecto (32) los partía en dos, el segundo medio vacío.
+        embeddings = encoder.encode_passages([c["text"] for c in finos], batch_size=64)
         # Vectores normalizados: producto interno = similitud coseno (§8.2).
         similitudes = embeddings @ query_embedding[0]
         orden = np.argsort(-similitudes)

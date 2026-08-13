@@ -22,6 +22,7 @@ pytesseract>=0.3.10
 # === Grafo de conocimiento (bonus) ===
 networkx>=3.2             # construcción y export a GraphML
 # NER multilingüe (src/graph.py) reutiliza transformers (pipeline de token-classification)
+sentencepiece>=0.2.0      # el tokenizer del modelo NER no trae versión rápida
 
 # === Informe (opcional, para generar el PDF) ===
 # reportlab>=4.0.0
