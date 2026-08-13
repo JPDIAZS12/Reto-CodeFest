@@ -30,7 +30,7 @@ N_CONSULTAS = 50
 
 
 def copiar_dependencias(raiz: Path, entrega: Path) -> list[str]:
-    """Copia config.py, src/ y queries.jsonl dentro de entrega/. Devuelve lo copiado."""
+    """Copia config.py, src/ y las consultas dentro de entrega/. Devuelve lo copiado."""
     copiados = []
 
     for nombre in ARCHIVOS_A_COPIAR:
@@ -45,8 +45,10 @@ def copiar_dependencias(raiz: Path, entrega: Path) -> list[str]:
                         ignore=shutil.ignore_patterns("__pycache__", "*.pyc"))
         copiados.append(f"{nombre}/")
 
-    shutil.copy2(QUERIES_FILE, entrega / "queries.jsonl")
-    copiados.append("queries.jsonl")
+    # El contrato de invocación (§1.5) nombra al archivo "consultas.jsonl" en
+    # la raíz de la entrega; generador.py lo busca con ese nombre primero.
+    shutil.copy2(QUERIES_FILE, entrega / "consultas.jsonl")
+    copiados.append("consultas.jsonl")
 
     return copiados
 
@@ -59,6 +61,7 @@ def validar_estructura(entrega: Path) -> list[str]:
     obligatorios = [
         entrega / "generador.py",
         entrega / "resultados.jsonl",
+        entrega / "consultas.jsonl",
         entrega / "config.py",
         entrega / "src" / "retrieve.py",
         indice_dir / "index.faiss",
@@ -70,6 +73,15 @@ def validar_estructura(entrega: Path) -> list[str]:
 
     if not (entrega / "informe_tecnico.pdf").exists():
         errores.append("FALTA: informe_tecnico.pdf")
+
+    # Contrato de invocación (§1.5, Tabla 1): el generador debe aceptar
+    # exactamente estos flags; si alguno falta, el jurado no puede reproducir.
+    generador = entrega / "generador.py"
+    if generador.exists():
+        codigo = generador.read_text(encoding="utf-8")
+        for flag in ("--consultas", "--base-vectorial", "--salida"):
+            if f'"{flag}"' not in codigo:
+                errores.append(f"CONTRATO §1.5: generador.py no acepta {flag}")
 
     if (indice_dir / "index.faiss").exists() and (indice_dir / "metadata.jsonl").exists():
         import faiss

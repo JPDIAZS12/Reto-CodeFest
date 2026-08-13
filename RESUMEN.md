@@ -53,7 +53,7 @@ Estimado: **2-4 horas** de procesamiento con RAM disponible.
 
 ## 📌 Próximos pasos
 
-1. Liberar memoria y **construir el índice del corpus completo** (~175 mil fragmentos).
+1. Liberar memoria y **construir el índice del corpus completo** (~130 mil fragmentos).
 2. Generar el `resultados.jsonl` de las 50 consultas reales y revisar calidad.
 3. **Grafo de conocimiento** (componente bonus, suma puntos).
 4. **Empaquetar la entrega** + redactar el **informe técnico** (máx. 8 páginas).

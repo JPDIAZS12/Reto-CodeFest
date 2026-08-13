@@ -1,6 +1,6 @@
 # Guía: construir el índice del CORPUS COMPLETO en Google Colab (GPU)
 
-Estimación: ~80.000 chunks, ~2 horas de T4 en total. Por eso se corre en
+Estimación: ~130.000 chunks, ~3,5 horas de T4 en total. Por eso se corre en
 **tres tandas (F1, F2, F3)** y se fusionan después: si una se cae, se repite
 solo esa. Las salidas se escriben **directamente en Drive**, no en `/content/`,
 para que una desconexión no se lleve el trabajo hecho.

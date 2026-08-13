@@ -132,6 +132,14 @@ suficiente.
 | `CHUNK_OVERLAP_SENTENCES` | 1 | una idea que cruza la frontera entre dos chunks queda representada en ambos |
 | `CHUNK_MIN_TOKENS` | 20 | descarta residuos sin contenido (líneas sueltas, pies de tabla) |
 
+**Caso borde documentado:** una oración que por sí sola excede los 450 tokens no
+se puede dividir sin cortarla, así que se emite como su propio chunk. Si supera
+los 512 tokens del encoder, e5 la trunca al codificar y el vector no representa
+su parte final — aunque **el texto completo sí queda en la metadata**, de modo
+que el fragmento entregado al evaluador está íntegro. Ocurre en texto sin
+puntuación final: tablas, listas de referencias, PDFs con maquetación rota.
+Magnitud: **[PENDIENTE]** de cuantificar sobre el corpus completo.
+
 ### 3.1 Tope de fragmentos por documento
 
 **Decisión: un solo documento aporta como máximo 2.000 fragmentos al índice**
@@ -318,8 +326,28 @@ NDCG@10 es idéntico con cualquiera de las cuatro estrategias.
    división aplica al **51%** de ellos. Como consecuencia, varios fragmentos de
    una misma respuesta pueden compartir `chunk_id`: son trozos distintos del
    mismo chunk padre, no contenido repetido.
-3. Se descartan los casi-duplicados (ver §7) y se rellena con el siguiente
+3. **Re-ranking fino:** los sub-fragmentos de los `RERANK_POOL_CHUNKS = 25`
+   mejores chunks se codifican con el **mismo encoder del índice** (prefijo
+   `passage: `) y se reordenan por su **propia** similitud coseno con la
+   consulta. El resto del pool queda como cola de respaldo.
+4. Se descartan los casi-duplicados (ver §7) y se rellena con el siguiente
    candidato, hasta completar 10.
+
+**Por qué re-ranking (decisión).** El NDCG@10 se juzga sobre el **texto del
+sub-fragmento entregado** (§10.2.1), pero la búsqueda gruesa puntúa **chunks de
+~450 tokens**. Sin re-scoring, los sub-fragmentos heredan la posición de su
+chunk padre: cuando un chunk se parte en dos (la mayoría, ver arriba), su mitad
+irrelevante sale en el ranking por delante de la mitad excelente del siguiente
+chunk. Con re-scoring, el orden fino refleja la similitud del texto que
+realmente se evalúa.
+
+**Legalidad verificada.** §8.3 prohíbe modelos *generativos* (decoders); aquí
+solo intervienen el encoder ya usado por el índice y operaciones vectoriales.
+§8.7 permite explícitamente post-filtros que operen directamente sobre los
+vectores. El `chunk_id` reportado sigue siendo el del chunk original del índice
+(trazabilidad, §9.2.1). Costo: ~25–50 codificaciones extra por consulta
+(~1.250–2.500 en las 50), trivial en GPU. Se desactiva con
+`RERANK_FRAGMENTOS = False`, que restaura el comportamiento previo exacto.
 
 ---
 
@@ -347,6 +375,19 @@ producción.
 
 - `resultados.jsonl`: exactamente 50 líneas, `q001`–`q050` **en orden**, con 3
   documentos y 10 fragmentos por consulta, ranks desde 1 (§9.3).
+- **Contrato de invocación (§1.5) implementado literal.** `generador.py` acepta
+  exactamente `--consultas`, `--base-vectorial` y `--salida`, con los valores
+  por defecto de la Tabla 1 (la invocación sin argumentos equivale al comando
+  completo desde la raíz de la entrega). Todas las rutas a índice y metadata se
+  resuelven relativas a `--base-vectorial`. El validador de entrega verifica la
+  presencia de los tres flags como guardia de regresión.
+- **El esquema se garantiza en generación, no solo en validación.** §9.3.2
+  penaliza arrays con un número distinto de 3 documentos / 10 fragmentos, así
+  que `retrieve` lo garantiza por construcción: si el dedup deja menos de 10
+  fragmentos, se rellena con los mejores candidatos descartados por
+  duplicación; si el pool tuviera menos de 3 documentos distintos (corpus
+  degenerado), se completa determinísticamente. Entregar el cupo completo prima
+  sobre cualquier post-filtro.
 - **La entrega es autocontenida.** `generador.py` resuelve todas sus rutas
   respecto a su propia ubicación, no respecto a `config.py` — porque `config.py`
   deriva las suyas de su propio directorio y al copiarlo dentro de `entrega/`

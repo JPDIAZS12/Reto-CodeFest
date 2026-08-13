@@ -9,12 +9,14 @@ _scratch/
 
 # Artefactos generados
 entrega/base_vectorial/
+entrega/base_vectorial*.zip
 entrega/grafo/
 *.faiss
 
 entrega/config.py
 entrega/src/
 entrega/queries.jsonl
+entrega/consultas.jsonl
 
 # Python
 __pycache__/

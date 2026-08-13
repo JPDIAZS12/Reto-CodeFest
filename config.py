@@ -40,6 +40,27 @@ if DOC_AGGREGATION not in DOC_AGGREGATIONS_VALIDAS:
     )
 DEDUP_JACCARD = 0.8
 
+# --- Re-ranking fino de sub-fragmentos ---
+# La búsqueda gruesa puntúa chunks de ~450 tokens, pero la salida son
+# sub-fragmentos de ≤250 palabras y el NDCG@10 se juzga sobre ese texto (§10.2.1).
+# Con el re-ranking, cada sub-fragmento de los mejores chunks se codifica con el
+# MISMO encoder del índice y se ordena por su propia similitud con la consulta.
+# Es un post-filtro sobre vectores (permitido por §8.7); no interviene ningún
+# modelo generativo (§8.3).
+RERANK_FRAGMENTOS = True   # False = orden heredado del chunk padre (comportamiento previo)
+RERANK_POOL_CHUNKS = 25    # cuántos chunks del pool reciben re-scoring fino
+
+# --- Grafo de conocimiento (Sección 7, componente bonus) ---
+# NER multilingüe (es/en/pt, los 3 idiomas del corpus) sobre HuggingFace,
+# licencia permisiva, basado en XLM-RoBERTa (arquitectura encoder).
+GRAPH_NER_MODEL = "Davlan/xlm-roberta-base-ner-hrl"
+GRAPH_MAX_GAP_CHARS = 200      # distancia máx. (caracteres) entre 2 entidades del mismo fragmento para inferir relación (aprox. "misma oración")
+GRAPH_MAX_ENTITIES_PER_FRAGMENT = 15  # límite para evitar explosión combinatoria de pares por fragmento
+GRAPH_RRF_K0 = 60              # constante de suavizado del Reciprocal Rank Fusion (Sección 8.4, Ec. 7)
+GRAPH_MAX_EVIDENCE_PER_EDGE = 10       # máx. doc_id/chunk_id de evidencia guardados por arista/nodo (tamaño del .graphml)
+USE_GRAPH = True               # si existe grafo.graphml, se usa como señal adicional en la recuperación (Sección 8.5)
+
+# --- Formatos soportados -> etiqueta del campo 'formato' de metadata ---
 FORMAT_MAP = {
     ".pdf": "pdf",
     ".html": "html", ".htm": "html",
