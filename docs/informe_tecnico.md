@@ -223,8 +223,18 @@ mediante **Reciprocal Rank Fusion** (§8.4, Ec. 7, k₀ = 60), tratando el grafo
 como un índice adicional — RRF combina por rango, lo que resuelve la
 diferencia de escala entre puntuaciones del grafo y similitudes coseno.
 
-Dimensiones del grafo sobre el corpus completo: [COMPLETAR: nº entidades, nº
-relaciones, % de aristas tipadas vs. genéricas].
+Dimensiones del grafo sobre el corpus completo: **157.587 entidades** y
+**1.065.325 relaciones** (grado medio 13,5; 2.677 nodos aislados). De las
+aristas, un **13,0 % está tipada** con un verbo de relación (138.391) y el
+**87,0 % restante es co-ocurrencia genérica** `se_relaciona_con` (926.934).
+Entre las tipadas dominan `utiliza` (2,0 %), `desarrolla` (1,6 %), `opera`
+(1,5 %) y `genera` (1,2 %). El predominio de la relación genérica es la
+consecuencia esperada de una extracción heurística por patrones verbales: solo
+tipa el vínculo cuando encuentra un verbo clave en el texto intermedio, y la
+mayoría de los pares de entidades co-aparecen sin un verbo explícito que los
+una. Aun sin tipar, esas aristas aportan señal de recuperación, porque lo que
+se explota en §8.5 es la vecindad de la entidad y sus chunks de evidencia, no
+la etiqueta de la relación.
 
 ---
 
@@ -250,7 +260,7 @@ presencia de los entregables de §1.4, alineación índice↔metadata de §5.3,
 esquema completo de §9.3 (50 líneas en orden `q001`–`q050`, exactamente 3
 documentos y 10 fragmentos con ranks desde 1, límite de 250 palabras) y
 presencia de los tres flags del contrato. Sale con código ≠ 0 si algo falla.
-Cada módulo tiene además pruebas automáticas (119 casos en 8 archivos de
+Cada módulo tiene además pruebas automáticas (146 casos en 9 archivos de
 `tests/`).
 
 ---

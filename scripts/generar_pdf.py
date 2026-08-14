@@ -54,10 +54,27 @@ strong { font-weight: bold; }
 
 
 def _chrome() -> str:
-    for nombre in ("google-chrome-stable", "google-chrome", "chromium"):
+    # Primero por PATH (Linux/Colab, y Windows si alguien lo agregó ahí).
+    for nombre in ("google-chrome-stable", "google-chrome", "chromium",
+                   "chrome", "msedge"):
         ruta = shutil.which(nombre)
         if ruta:
             return ruta
+
+    # En Windows los navegadores no quedan en el PATH: hay que ir a las rutas
+    # de instalación. Edge sirve igual que Chrome porque comparte el motor
+    # Chromium y acepta el mismo --headless --print-to-pdf.
+    candidatas = [
+        Path(r"C:\Program Files\Google\Chrome\Application\chrome.exe"),
+        Path(r"C:\Program Files (x86)\Google\Chrome\Application\chrome.exe"),
+        Path.home() / r"AppData\Local\Google\Chrome\Application\chrome.exe",
+        Path(r"C:\Program Files\Microsoft\Edge\Application\msedge.exe"),
+        Path(r"C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe"),
+    ]
+    for candidata in candidatas:
+        if candidata.exists():
+            return str(candidata)
+
     print("[ERROR] no se encontró Chrome/Chromium para imprimir el PDF.")
     sys.exit(1)
 

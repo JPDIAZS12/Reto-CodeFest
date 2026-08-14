@@ -35,3 +35,6 @@ models/
 Thumbs.db
 .vscode/
 .idea/
+
+# Archivos de bloqueo temporales de Word
+~$*

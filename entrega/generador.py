@@ -69,7 +69,14 @@ def load_graph_if_available():
         return None, None
     from src.graph import load_graph, build_entity_index
     print(f"Grafo de conocimiento encontrado en {ruta}, se usará como señal adicional.")
+    # networkx no lee GraphML en streaming: arma el árbol XML completo y luego
+    # lo convierte, así que estos minutos sin salida son esperados.
+    mb = ruta.stat().st_size / 1e6
+    print(f"Cargando el grafo ({mb:,.0f} MB): tarda varios minutos y no imprime "
+          f"progreso.", flush=True)
     grafo = load_graph(ruta)
+    print(f"Grafo cargado: {grafo.number_of_nodes():,} entidades, "
+          f"{grafo.number_of_edges():,} relaciones.", flush=True)
     return grafo, build_entity_index(grafo)
 
 
@@ -187,8 +194,16 @@ def main() -> None:
     print(f"{len(queries)} consultas leídas de {queries_path.name}")
 
     out_path.parent.mkdir(parents=True, exist_ok=True)
-    print("El re-ranking codifica ~46 sub-fragmentos por consulta: en CPU son "
-          "unos 45 s por consulta, en GPU unos pocos segundos.", flush=True)
+    # Tiempos medidos en el corpus completo, para que quien reproduzca sepa de
+    # antemano cuánto tarda y no lo interrumpa creyendo que se colgó.
+    if grafo is not None:
+        print("Con el grafo activo el pool de re-ranking crece: ~2 min por "
+              "consulta en CPU, es decir ~1 h 40 en total (medido: 99 min para "
+              "las 50 consultas). En GPU baja a unos pocos minutos.", flush=True)
+    else:
+        print("El re-ranking codifica ~46 sub-fragmentos por consulta: en CPU "
+              "son unos 45 s por consulta, ~37 min en total. En GPU, unos "
+              "pocos segundos por consulta.", flush=True)
 
     t0 = time.time()
     with open(out_path, "w", encoding="utf-8") as salida:
